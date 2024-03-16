@@ -170,3 +170,6 @@ data/
 
 # OAuth
 oauth/
+
+# Experimental code
+experimental/
