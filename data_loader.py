@@ -30,7 +30,7 @@ def fetch_top_anime(headers: dict, limit: int = 500) -> dict:
         raise Exception("Failed to fetch top anime")
 
 
-def fetch_anime_details(anime_id: int, headers: dict, max_retries: int = 5, base_delay: float = 0.5, timeout: float = 10.0) -> dict:
+def fetch_anime_details(anime_id: int, headers: dict, session: requests.Session, max_retries: int = 5, base_delay: float = 1.0, timeout: float = 10.0) -> dict:
     r"""Fetches the details of an anime from MyAnimeList.
     
     :param anime_id: Anime ID
@@ -75,7 +75,7 @@ def fetch_anime_details(anime_id: int, headers: dict, max_retries: int = 5, base
     
     for attempt in range(max_retries):
         try:
-            response = requests.get(url, headers=headers, params=params, timeout=timeout)
+            response = session.get(url, headers=headers, params=params, timeout=timeout)
             
             if response.status_code == 200:
                 # Successful request
@@ -83,15 +83,21 @@ def fetch_anime_details(anime_id: int, headers: dict, max_retries: int = 5, base
             else:
                 # Received a response other than 200 OK, handle: log, wait, and possibly retry
                 print(f"Request failed with status code: {response.status_code}")
-                time.sleep(base_delay * (2 ** attempt))
+                backoff = base_delay * (2 ** attempt)
+                print(f"Retrying in {backoff} seconds.")
+                time.sleep(backoff)
         except requests.Timeout:
             # The request timed out, log and potentially retry
             print(f"Request timed out after {timeout} seconds.")
-            time.sleep(base_delay * (2 ** attempt))
+            backoff = base_delay * (2 ** attempt)
+            print(f"Retrying in {backoff} seconds.")
+            time.sleep(backoff)
         except requests.RequestException as e:
             # General requests exception (includes ConnectionError, HTTPError, etc.)
             print(f"Request failed: {str(e)}")
-            time.sleep(base_delay * (2 ** attempt))
+            backoff = base_delay * (2 ** attempt)
+            print(f"Retrying in {backoff} seconds.")
+            time.sleep(backoff)
     
     # All retries failed
     print("Max retries exceeded.")
@@ -130,18 +136,23 @@ def create_dataframe(anime_details: list) -> pd.DataFrame:
     # Convert json to dataframe
     anime_df = pd.json_normalize(anime_details)
 
-    # Clean up the dataframe
-    # Remove mal rewrite from synopsis
-    anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.replace("[Written by MAL Rewrite]", "") if pd.notnull(x) else x)
-    # Remove newlines
-    anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.replace("\n", " ") if pd.notnull(x) else x)
-    # Remove leading and trailing double quotes
-    anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.strip("\"") if pd.notnull(x) else x)
-    anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.strip() if pd.notnull(x) else x)
-    # Escape double quotes and wrap in double quotes
-    anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.replace('"', '""') if pd.notnull(x) else x)
-    anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: re.sub(r'"{2,}', '"', x) if pd.notnull(x) else x)
-    
+    try:
+        # Clean up the dataframe
+        # Remove mal rewrite from synopsis
+        anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.replace("[Written by MAL Rewrite]", "") if pd.notnull(x) else x)
+        # Remove newlines
+        anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.replace("\n", " ") if pd.notnull(x) else x)
+        # Remove leading and trailing double quotes
+        anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.strip("\"") if pd.notnull(x) else x)
+        anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.strip() if pd.notnull(x) else x)
+        # Escape double quotes and wrap in double quotes
+        anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.replace('"', '""') if pd.notnull(x) else x)
+        anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: re.sub(r'"{2,}', '"', x) if pd.notnull(x) else x)
+    except Exception as e:
+        with open('data.json', 'w', encoding='utf-8') as f:
+            json.dump(anime_details, f, ensure_ascii=False, indent=4)
+        raise e
+
     return anime_df
 
 
@@ -204,27 +215,33 @@ def collect_data(headers: dict, debug: bool = False, max_iterations: int = 100) 
 
     # Colleted anime details
     anime_details = []
-
-    # Debugging: Set a lower number of iterations for debugging
-    iteration_limit = 1 if debug else max_iterations
-
-    # Prepare the progress bar
-    pbar = tqdm(total=iteration_limit, desc="Fetching anime details")
     
     # Debugging: Limit the number of iterations
+    iteration_limit = 1 if debug else max_iterations
     if debug:
         print("Debug mode enabled: Limiting the number of iterations to", iteration_limit)
+    
+    # Prepare the progress bar
+    pbar = tqdm(total=iteration_limit, desc="Fetching anime details")
 
     iterations = 0
+    session = requests.Session()
 
     # While there are anime to fetch and the iteration limit has not been reached
     while download_queue and iterations < iteration_limit:
         id = download_queue.pop(0)
-        fetched_details = fetch_anime_details(id, headers=headers)
 
+        # Refresh the session every 100 iterations
+        if iterations % 100 == 0 and iterations > 0:
+            session = requests.Session()
+
+        fetched_details = fetch_anime_details(anime_id=id, headers=headers, session=session)
+
+        # Request failed, recover the id and exit
         if not fetched_details:
-            # Request failed, recover the id and exit
             download_queue.append(id)
+            session.close()
+            print("Request failed, exiting")
             break
 
         anime_details.append(fetched_details)
@@ -232,8 +249,8 @@ def collect_data(headers: dict, debug: bool = False, max_iterations: int = 100) 
         iterations += 1
         pbar.update(1)
 
-        # Sleep to respect the rate limit
-        time.sleep(0.5)
+        # Sleep to respect the rate limit (keep at >= 4.5 seconds to avoid rate limit errors)
+        time.sleep(4.5)
 
         related_anime_ids = get_related_anime_ids(fetched_details)
         # Add not seen related anime to the download queue
@@ -245,8 +262,8 @@ def collect_data(headers: dict, debug: bool = False, max_iterations: int = 100) 
     # Save the state
     save_state(seen, download_queue)
 
+    print('Length of seen:', len(seen), 'Length of download queue:', len(download_queue))
     if debug:
-        print('Length of seen:', len(seen), 'Length of download queue:', len(download_queue))
         print('Next anime to fetch:', download_queue[0] if download_queue else None)
 
     pbar.close()
@@ -273,7 +290,7 @@ if __name__ == "__main__":
         'Authorization': f'Bearer {access_token}'
     }
 
-    anime_df = collect_data(headers=headers, debug=False, max_iterations=100)
+    anime_df = collect_data(headers=headers, debug=False, max_iterations=150)
 
     # Add data to the CSV file
     output_path='data/anime_data.csv'
