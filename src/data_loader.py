@@ -121,7 +121,7 @@ def get_related_anime_ids(anime: Dict[str, Any], include_recommended: bool = Tru
                 related_anime.append(recommendation['node']['id'])
         return related_anime
     except KeyError as e:
-        print(f"KeyError: {anime}")
+        print(f"KeyError: {str(e)}")
         raise e
 
 
@@ -156,7 +156,7 @@ def create_dataframe(anime_details: list) -> pd.DataFrame:
     return anime_df
 
 
-def save_state(seen: set, download_queue: list, seen_path: str = 'data/seen.pkl', queue_path: str = 'data/queue.pkl'):
+def save_state(seen: set, download_queue: list, seen_path: str = None, queue_path: str = None):
     r"""Saves the state of the data collection process.
 
     :param seen: Set of seen anime ids
@@ -165,13 +165,18 @@ def save_state(seen: set, download_queue: list, seen_path: str = 'data/seen.pkl'
     :param queue_path: (optional) Path to save the download queue, defaults to 'data/queue.pkl'
     """
 
+    if seen_path is None:
+        seen_path = os.path.join(os.getenv('DATA_DIR'), 'interim', 'seen.pkl')
+    if queue_path is None:
+        queue_path = os.path.join(os.getenv('DATA_DIR'), 'interim', 'queue.pkl')
+
     with open(seen_path, 'wb') as f:
         pickle.dump(seen, f)
     with open(queue_path, 'wb') as f:
         pickle.dump(download_queue, f)
 
 
-def load_state(seen_path: str = 'data/seen.pkl', queue_path: str = 'data/queue.pkl') -> tuple:
+def load_state(seen_path: str = None, queue_path: str = None) -> tuple:
     r"""Loads the state of the data collection process.
 
     :param seen_path: (optional) Path to load the seen set, defaults to 'data/seen.pkl'
@@ -179,6 +184,11 @@ def load_state(seen_path: str = 'data/seen.pkl', queue_path: str = 'data/queue.p
     :return: Tuple of seen set and download queue
     :rtype: tuple
     """
+
+    if seen_path is None:
+        seen_path = os.path.join(os.getenv('DATA_DIR'), 'interim', 'seen.pkl')
+    if queue_path is None:
+        queue_path = os.path.join(os.getenv('DATA_DIR'), 'interim', 'queue.pkl')
 
     if os.path.exists(seen_path) and os.path.exists(queue_path):
         with open(seen_path, 'rb') as f:
@@ -250,17 +260,19 @@ def collect_data(headers: dict, debug: bool = False, max_iterations: int = 100) 
         pbar.update(1)
 
         # Sleep to respect the rate limit (keep at >= 4.5 seconds to avoid rate limit errors)
-        time.sleep(4.5)
+        time.sleep(4.15)
+        
+        try:
+            related_anime_ids = get_related_anime_ids(fetched_details)
+        except KeyError as e:
+            download_queue.append(id)
+            break
 
-        related_anime_ids = get_related_anime_ids(fetched_details)
         # Add not seen related anime to the download queue
         for related_id in related_anime_ids:
             if related_id not in seen:
                 download_queue.append(related_id)
                 seen.add(related_id)
-
-    # Save the state
-    save_state(seen, download_queue)
 
     print('Length of seen:', len(seen), 'Length of download queue:', len(download_queue))
     if debug:
@@ -269,7 +281,13 @@ def collect_data(headers: dict, debug: bool = False, max_iterations: int = 100) 
     pbar.close()
 
     # Convert the list of anime details to a DataFrame
-    anime_df = create_dataframe(anime_details)
+    try:
+        anime_df = create_dataframe(anime_details)
+    except Exception as e:
+        print(f'Error creating dataframe: {str(e)}')
+    
+    # Save the state
+    save_state(seen, download_queue)
 
     return anime_df
 
@@ -290,8 +308,8 @@ if __name__ == "__main__":
         'Authorization': f'Bearer {access_token}'
     }
 
-    anime_df = collect_data(headers=headers, debug=False, max_iterations=150)
+    anime_df = collect_data(headers=headers, debug=False, max_iterations=300)
 
-    # Add data to the CSV file
-    output_path='data/anime_data.csv'
+    # Add data to the CSV file '../data/raw/anime_data.csv'
+    output_path = os.path.join(os.getenv('DATA_DIR'), 'raw', 'anime_data.csv')
     anime_df.to_csv(output_path, mode='a', header=not os.path.exists(output_path), index=False)
