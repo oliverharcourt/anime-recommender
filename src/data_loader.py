@@ -79,6 +79,7 @@ def fetch_anime_details(anime_id: int, headers: dict, session: requests.Session,
             
             if response.status_code == 200:
                 # Successful request
+                
                 return response.json()
             else:
                 # Received a response other than 200 OK, handle: log, wait, and possibly retry
@@ -161,8 +162,8 @@ def save_state(seen: set, download_queue: list, seen_path: str = None, queue_pat
 
     :param seen: Set of seen anime ids
     :param download_queue: List of anime ids to download
-    :param seen_path: (optional) Path to save the seen set, defaults to 'data/seen.pkl'
-    :param queue_path: (optional) Path to save the download queue, defaults to 'data/queue.pkl'
+    :param seen_path: (optional) Path to save the seen set, defaults to None
+    :param queue_path: (optional) Path to save the download queue, defaults to None
     """
 
     if seen_path is None:
@@ -179,8 +180,8 @@ def save_state(seen: set, download_queue: list, seen_path: str = None, queue_pat
 def load_state(seen_path: str = None, queue_path: str = None) -> tuple:
     r"""Loads the state of the data collection process.
 
-    :param seen_path: (optional) Path to load the seen set, defaults to 'data/seen.pkl'
-    :param queue_path: (optional) Path to load the download queue, defaults to 'data/queue.pkl'
+    :param seen_path: (optional) Path to load the seen set, defaults to None
+    :param queue_path: (optional) Path to load the download queue, defaults to None
     :return: Tuple of seen set and download queue
     :rtype: tuple
     """
@@ -310,6 +311,6 @@ if __name__ == "__main__":
 
     anime_df = collect_data(headers=headers, debug=False, max_iterations=300)
 
-    # Add data to the CSV file '../data/raw/anime_data.csv'
+    # Add data to the CSV file
     output_path = os.path.join(os.getenv('DATA_DIR'), 'raw', 'anime_data.csv')
     anime_df.to_csv(output_path, mode='a', header=not os.path.exists(output_path), index=False)
