@@ -10,10 +10,11 @@ from tqdm import tqdm
 import pickle
 import signal
 import sys
+import logging
 
 class DataCollector:
 
-    def __init__(self, headers: dict, base_url: str, data_dir: str, debug: bool = False, max_iterations: int = 100):
+    def __init__(self, headers: dict, base_url: str, data_dir: str, request_delay: float = 4.15, max_iterations: int = 100, debug: bool = False):
         r"""Initializes the data collector.
 
         :param headers: Headers with Authorization
@@ -26,6 +27,7 @@ class DataCollector:
         self.headers = headers
         self.base_url = base_url
         self.data_dir = data_dir
+        self.request_delay = request_delay
         self.debug = debug
         self.max_iterations = max_iterations if not debug else 1
         self.seen = set()
@@ -160,22 +162,26 @@ class DataCollector:
                 if response.status_code == 200:
                     # Successful request
                     # log the response
+                    logging.info(f"Request successful for anime id: {anime_id}\nHeaders: {response.headers}")
                     return response.json()
                 else:
                     # Received a response other than 200 OK, handle: log, wait, and possibly retry
                     print(f"Request failed with status code: {response.status_code}")
+                    logging.warning(f"Request failed with status code: {response.status_code}\nHeaders: {response.headers}")
                     backoff = base_delay * (2 ** attempt)
                     print(f"Retrying in {backoff} seconds.")
                     time.sleep(backoff)
             except requests.Timeout:
                 # The request timed out, log and potentially retry
                 print(f"Request timed out after {timeout} seconds.")
+                logging.warning(f"Request timed out after {timeout} seconds.")
                 backoff = base_delay * (2 ** attempt)
                 print(f"Retrying in {backoff} seconds.")
                 time.sleep(backoff)
             except requests.RequestException as e:
                 # General requests exception (includes ConnectionError, HTTPError, etc.)
                 print(f"Request failed: {str(e)}")
+                logging.error(f"Request failed: {str(e)}")
                 backoff = base_delay * (2 ** attempt)
                 print(f"Retrying in {backoff} seconds.")
                 time.sleep(backoff)
@@ -282,7 +288,7 @@ class DataCollector:
             pbar.update(1)
 
             # Sleep to respect the rate limit (keep at >= 4.5 seconds to avoid rate limit errors)
-            time.sleep(4.15)
+            time.sleep(self.request_delay)
             
             try:
                 related_anime_ids = self.get_related_anime_ids(fetched_details)
@@ -339,7 +345,13 @@ if __name__ == "__main__":
         'Authorization': f'Bearer {access_token}'
     }
 
-    collector = DataCollector(headers=headers, base_url=base_url, data_dir=data_dir, debug=False, max_iterations=10)
+    logging.basicConfig(filename=os.path.join(os.getenv('LOGS_DIR'), 'data_collector.log'),
+                            level=logging.INFO,
+                            format='%(asctime)s - %(levelname)s - %(message)s')
+
+    collector = DataCollector(headers=headers, base_url=base_url,
+                              data_dir=data_dir, request_delay=4.15,
+                              max_iterations=150, debug=False)
 
     anime_df = collector.run()
 

@@ -173,3 +173,6 @@ oauth/
 
 # Experimental code
 experimental/
+
+# Logs
+logs/
