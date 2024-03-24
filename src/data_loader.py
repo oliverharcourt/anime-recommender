@@ -268,7 +268,8 @@ class DataCollector:
             # Refresh the session every 100 iterations
             if iterations % 100 == 0 and iterations > 0:
                 self.session = requests.Session()
-                print("Refreshing session.")
+                if self.debug:
+                    print("Refreshing session.")
 
             fetched_details = self.fetch_anime_details(anime_id=id)
 
@@ -290,6 +291,7 @@ class DataCollector:
                 related_anime_ids = self.get_related_anime_ids(fetched_details)
             except KeyError as e:
                 self.download_queue.append(id)
+                print(f"KeyError: {str(e)}")
                 break
 
             self.add_ids_to_queue(related_anime_ids)
@@ -340,6 +342,6 @@ if __name__ == "__main__":
 
     collector = DataCollector(headers=headers, base_url=base_url,
                               data_dir=data_dir, request_delay=4.15,
-                              max_iterations=10, debug=True)
+                              max_iterations=500, debug=False)
 
     anime_df = collector.run()
