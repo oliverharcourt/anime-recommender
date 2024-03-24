@@ -20,8 +20,9 @@ class DataCollector:
         :param headers: Headers with Authorization
         :param base_url: Base URL for the MAL API
         :param data_dir: Path to the data directory
-        :param debug: (optional) Debug mode, defaults to False
+        :param request_delay: (optional) Delay between API requests, defaults to 4.15
         :param max_iterations: (optional) Maximum number of iterations, defaults to 100
+        :param debug: (optional) Debug mode, defaults to False
         """
 
         self.headers = headers
@@ -38,7 +39,7 @@ class DataCollector:
 
 
     def signal_handler(self, sig, frame):
-        r"""Handles the SIGINT signal.
+        r"""Handles the SIGINT signal by saving the state and exiting.
 
         :param sig: Signal number
         :param frame: Current stack frame
@@ -51,6 +52,8 @@ class DataCollector:
 
     def save_state(self):
         r"""Saves the state of the data collection process.
+            Saves the seen anime ids and the download queue to pickle files.
+            Saves the anime details to a CSV file.
 
         :param seen: Set of seen anime ids
         :param download_queue: List of anime ids to download
@@ -111,9 +114,9 @@ class DataCollector:
         
         :param anime_id: Anime ID
         :param max_retries: (optional) Maximum number of retries, defaults to 5
-        :param base_delay: (optional) Base delay in seconds for exponential backoff, defaults to 0.5
+        :param base_delay: (optional) Base delay in seconds for exponential backoff, defaults to 1.0
         :param timeout: (optional) Maximum time in seconds to wait for a response, defaults to 10.0
-        :return: The fetched anime details or an empty dictionary if the request failed
+        :return: JSON object with fetched anime details or an empty dictionary if the request failed
         :rtype: dict
         """
 
@@ -187,6 +190,7 @@ class DataCollector:
         r"""Extracts the related anime ids from an anime json object.
 
         :param anime: Anime json object
+        :param include_recommended: (optional) Whether to include recommended anime ids, defaults to True
         :return: List of related anime ids
         :rtype: list
         :raises KeyError: Structure of the anime json object is not as expected
@@ -237,6 +241,7 @@ class DataCollector:
 
         return anime_df
     
+    
     def add_ids_to_queue(self, anime_ids: list):
         r"""Adds not seen anime ids to the download queue.
 
@@ -248,15 +253,11 @@ class DataCollector:
                 self.download_queue.append(id)
                 self.seen.add(id)
 
-    # Main function to collect data
-    def collect_data(self) -> pd.DataFrame:
-        r"""Fetches the top and related anime from MyAnimeList and downloads relevant info.
 
-        :return: DataFrame with anime details
-        :rtype: pd.DataFrame
+    def collect_data(self):
+        r"""Main data collection loop.
         """
         
-        # Prepare the progress bar
         pbar = tqdm(total=self.max_iterations, desc="Fetching anime details")
 
         iterations = 0
