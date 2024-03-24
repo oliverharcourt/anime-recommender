@@ -29,7 +29,7 @@ class DataCollector:
         self.data_dir = data_dir
         self.request_delay = request_delay
         self.debug = debug
-        self.max_iterations = max_iterations if not debug else 1
+        self.max_iterations = max_iterations
         self.seen = set()
         self.download_queue = []
         self.anime_details = []
@@ -58,14 +58,16 @@ class DataCollector:
 
         seen_path = os.path.join(self.data_dir, 'interim', 'seen.pkl')
         queue_path = os.path.join(self.data_dir, 'interim', 'queue.pkl')
-        details_path = os.path.join(self.data_dir, 'interim', 'details.pkl')
 
         with open(seen_path, 'wb') as f:
             pickle.dump(self.seen, f)
         with open(queue_path, 'wb') as f:
             pickle.dump(self.download_queue, f)
-        with open(details_path, 'wb') as f:
-            pickle.dump(self.anime_details, f)
+        
+        anime_df = self.create_dataframe()
+
+        output_path = os.path.join(self.data_dir, 'raw', 'anime_data.csv')
+        anime_df.to_csv(output_path, mode='a', header=not os.path.exists(output_path), index=False)
 
 
     def load_state(self):
@@ -74,7 +76,6 @@ class DataCollector:
 
         seen_path = os.path.join(self.data_dir, 'interim', 'seen.pkl')
         queue_path = os.path.join(self.data_dir, 'interim', 'queue.pkl')
-        details_path = os.path.join(self.data_dir, 'interim', 'details.pkl')
 
         if os.path.exists(seen_path):
             with open(seen_path, 'rb') as f:
@@ -83,15 +84,6 @@ class DataCollector:
         if os.path.exists(queue_path):
             with open(queue_path, 'rb') as f:
                 self.download_queue = pickle.load(f)
-
-        if os.path.exists(details_path):
-            with open(details_path, 'rb') as f:
-                intermediate = pickle.load(f)
-                anime_ids = pd.read_csv(os.path.join(self.data_dir, 'raw', 'anime_data.csv'))['id'].tolist()
-                anime_ids = set(anime_ids)
-                self.anime_details = [anime for anime in intermediate if anime['id'] not in anime_ids]
-                if self.debug:
-                    print([anime['id'] for anime in self.anime_details])
 
 
     def fetch_top_anime(self, limit: int = 500):
@@ -105,11 +97,12 @@ class DataCollector:
         anime_list_url = f"{self.base_url}/anime/ranking"
         response = self.session.get(anime_list_url, headers=self.headers, params={'limit': limit, 'ranking_type': 'all'})
         if response.status_code == 200:
-            for anime in response['data']:
+            for anime in response.json()['data']:
                 if anime['node']['id'] not in self.seen:
                     self.download_queue.append(anime['node']['id'])
                     self.seen.add(anime['node']['id'])
         else:
+            logging.error(f"Failed to fetch top anime: {response.status_code if response else None}")
             raise Exception("Failed to fetch top anime")
 
 
@@ -161,7 +154,6 @@ class DataCollector:
                 
                 if response.status_code == 200:
                     # Successful request
-                    # log the response
                     logging.info(f"Request successful for anime id: {anime_id}\nHeaders: {response.headers}")
                     return response.json()
                 else:
@@ -197,6 +189,7 @@ class DataCollector:
         :param anime: Anime json object
         :return: List of related anime ids
         :rtype: list
+        :raises KeyError: Structure of the anime json object is not as expected
         """
 
         try:
@@ -217,22 +210,26 @@ class DataCollector:
 
         :return: Cleaned anime dataframe
         :rtype: pd.DataFrame
+        :raises Exception: Failed to clean synopsis
         """
 
-        # Convert json to dataframe
         anime_df = pd.json_normalize(self.anime_details)
 
+        expected_columns = ['id', 'title', 'synopsis', 'mean', 'popularity', 'num_list_users',
+                            'num_scoring_users', 'nsfw', 'genres', 'studios', 'num_episodes',
+                            'average_episode_duration', 'status', 'rating', 'source', 'media_type',
+                            'created_at', 'updated_at', 'start_date', 'end_date', 'related_anime',
+                            'related_manga', 'recommendations', 'main_picture.medium',
+                            'main_picture.large', 'start_season.year', 'start_season.season',
+                            'statistics.status.watching', 'statistics.status.completed',
+                            'statistics.status.on_hold', 'statistics.status.dropped',
+                            'statistics.status.plan_to_watch', 'statistics.num_list_users']
+
+        anime_df = anime_df.reindex(columns=expected_columns)
+
         try:
-            # Remove mal rewrite from synopsis
-            anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.replace("[Written by MAL Rewrite]", "") if pd.notnull(x) else x)
-            # Remove newlines
             anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.replace("\n", " ") if pd.notnull(x) else x)
-            # Remove leading and trailing double quotes
-            anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.strip("\"") if pd.notnull(x) else x)
             anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.strip() if pd.notnull(x) else x)
-            # Replace double quotes with two double quotes and remove extra double quotes
-            anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: x.replace('"', '""') if pd.notnull(x) else x)
-            anime_df['synopsis'] = anime_df['synopsis'].apply(lambda x: re.sub(r'"{2,}', '"', x) if pd.notnull(x) else x)
         except Exception as e:
             with open('data.json', 'w', encoding='utf-8') as f:
                 json.dump(self.anime_details, f, ensure_ascii=False, indent=4)
@@ -278,8 +275,7 @@ class DataCollector:
             # Request failed, recover the id and exit
             if not fetched_details:
                 self.download_queue.append(id)
-                self.session.close()
-                print("Request failed, exiting")
+                print("Request failed, exiting...")
                 break
 
             self.anime_details.append(fetched_details)
@@ -316,16 +312,9 @@ class DataCollector:
 
         self.collect_data()
 
-        anime_df = pd.DataFrame()
-
-        try:
-            anime_df = self.create_dataframe()
-        except Exception as e:
-            print(f'Error creating dataframe: {str(e)}')
+        self.session.close()
 
         self.save_state()
-
-        return anime_df
 
 
 if __name__ == "__main__":
@@ -351,9 +340,6 @@ if __name__ == "__main__":
 
     collector = DataCollector(headers=headers, base_url=base_url,
                               data_dir=data_dir, request_delay=4.15,
-                              max_iterations=150, debug=False)
+                              max_iterations=10, debug=True)
 
     anime_df = collector.run()
-
-    output_path = os.path.join(data_dir, 'raw', 'anime_data.csv')
-    anime_df.to_csv(output_path, mode='a', header=not os.path.exists(output_path), index=False)
