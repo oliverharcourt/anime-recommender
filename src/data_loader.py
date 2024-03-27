@@ -157,7 +157,7 @@ class DataCollector:
                 
                 if response.status_code == 200:
                     # Successful request
-                    logging.info(f"Request successful for anime id: {anime_id}\nHeaders: {response.headers}")
+                    #logging.info(f"Request successful for anime id: {anime_id}\nHeaders: {response.headers}")
                     return response.json()
                 else:
                     # Received a response other than 200 OK, handle: log, wait, and possibly retry
@@ -241,7 +241,7 @@ class DataCollector:
 
         return anime_df
     
-    
+
     def add_ids_to_queue(self, anime_ids: list):
         r"""Adds not seen anime ids to the download queue.
 
