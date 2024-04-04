@@ -297,11 +297,11 @@ class DataCollector:
 
             self.add_ids_to_queue(related_anime_ids)
 
+        pbar.close()
+
         print('Length of seen:', len(self.seen), 'Length of download queue:', len(self.download_queue))
         if self.debug:
             print('Next anime to fetch:', self.download_queue[0] if self.download_queue else None)
-
-        pbar.close()
 
 
     def run(self):
