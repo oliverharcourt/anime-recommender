@@ -1,16 +1,18 @@
-from typing import Any, Dict
-import requests
-import os
-from dotenv import load_dotenv
-import pandas as pd
-import time
 import json
-import re
-from tqdm import tqdm
+import logging
+import os
 import pickle
+import re
 import signal
 import sys
-import logging
+import time
+from typing import Any, Dict
+
+import pandas as pd
+import requests
+from dotenv import load_dotenv
+from tqdm import tqdm
+
 
 class DataCollector:
 
