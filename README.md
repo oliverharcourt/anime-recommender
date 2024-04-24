@@ -10,4 +10,4 @@
    2. the distance calculation weights higher rated anime more
    3. e.g. weights in order: w(A) > w(B) > w(C)
    4. thus recommendations generated are closer to anime A
-5.  
+5. model returns the k closest anime according to weighted distance metrics
