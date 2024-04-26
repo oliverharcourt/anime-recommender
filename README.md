@@ -14,7 +14,6 @@
    4. thus recommendations generated are closer to anime A
 5. model returns the k closest anime according to weighted distance metrics
 
-
 ### Approach 2
 
 1. model takes a user id and gets their completed and watching list
