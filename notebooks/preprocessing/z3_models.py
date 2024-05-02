@@ -4,6 +4,10 @@ from z3 import *
 s = Solver() # Z3 solver instance
 x,y = Ints('x y') # Int-typed variables
 
+# movie = 'avg_ep_dur'>1800
+# tv = ('avg_ep_dur'<=1800 & 'num_episodes'>=6)
+# special = ('avg_ep_dur'<=1800 & 'num_episodes'<6) | ('avg_ep_dur' < 240)
+
 # x := avg_ep_dur, y := num_eps
 # (x > 1800 | (y >= 6 & x >= 240)) & (x > 1800 | y < 6) & (x <= 1800)
 
