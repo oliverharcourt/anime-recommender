@@ -176,3 +176,7 @@ experimental/
 
 # Logs
 logs/
+
+# Model weights and checkpoints
+*.safetensors
+checkpoints/
