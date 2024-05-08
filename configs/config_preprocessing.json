@@ -1,0 +1,22 @@
+{
+    "time_diff": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/time_diff.pkl",
+    "start_season_year": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/start_season_year.pkl",
+    "start_season_season": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/start_season_season.pkl",
+    "genres": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/genres.pkl",
+    "studios": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/studios.pkl",
+    "nsfw": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/nsfw.pkl",
+    "source": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/source.pkl",
+    "status": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/status.pkl",
+    "media_type": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/media_type.pkl",
+    "mean": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/mean.pkl",
+    "popularity": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/popularity.pkl",
+    "num_scoring_users": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/num_scoring_users.pkl",
+    "num_episodes": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/num_episodes.pkl",
+    "average_episode_duration": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/average_episode_duration.pkl",
+    "statistics_status_watching": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/statistics_status_watching.pkl",
+    "statistics_status_completed": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/statistics_status_completed.pkl",
+    "statistics_status_on_hold": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/statistics_status_on_hold.pkl",
+    "statistics_status_dropped": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/statistics_status_dropped.pkl",
+    "statistics_status_plan_to_watch": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/statistics_status_plan_to_watch.pkl",
+    "statistics_num_list_users": "/Users/oliverharcourt/code/projects/anime_recommendation_system/src/preprocessing/models/statistics_num_list_users.pkl"
+}
