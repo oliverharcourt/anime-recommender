@@ -180,3 +180,6 @@ logs/
 # Model weights and checkpoints
 *.safetensors
 checkpoints/
+
+# Pickle files
+*.pkl
