@@ -60,7 +60,7 @@ def load_model(path: str) -> object:
     return scaler
 
 
-def process_dates(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+def process_dates(data: pd.DataFrame, td_scaler_path: str, year_scaler_path: str) -> pd.DataFrame:
     """
     Preprocesses the dates in the given anime data batch.
     Preprocesses: start_date, end_date, start_season.year
@@ -107,10 +107,10 @@ def process_dates(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     data['time_diff'] = data.apply(lambda x: time_diff(x['start_date'], x['end_date']), axis=1)
     data = data.drop(columns=['start_date', 'end_date'])
     # Scale time_diff
-    td_scaler = load_model(config['time_diff'])
+    td_scaler = load_model(td_scaler_path)
     data['time_diff'] = td_scaler.transform(data['time_diff'].values.reshape(-1, 1))
     # Scale start_season.year
-    year_scaler = load_model(config['start_season_year'])
+    year_scaler = load_model(year_scaler_path)
     data['start_season.year'] = year_scaler.transform(data['start_season.year'].values.reshape(-1, 1))
     return data
 
@@ -484,20 +484,24 @@ def process(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     Returns:
         pd.DataFrame: The preprocessed data.
     """
-    data = process_dates(data, config['dates'])
-    data = preprocess_season(data, config['season'])
-    data = preprocess_text(data, config['text'])
-    data = preprocess_genres(data, config['genres'])
-    data = preprocess_studios(data, config['studios'])
-    data = preprocess_nsfw(data, config['nsfw'])
-    data = preprocess_source(data, config['source'])
-    data = preprocess_status(data, config['status'])
-    data = preprocess_media_type(data, config['media_type'])
-    data = preprocess_rating(data, config['rating'])
-    data = preprocess_mean(data, config['mean'])
-    data = preprocess_popularity(data, config['popularity'])
-    data = preprocess_num_scoring_users(data, config['num_scoring_users'])
-    data = preprocess_num_episodes(data, config['num_episodes'])
-    data = preprocess_average_episode_duration(data, config['average_episode_duration'])
-    data = preprocess_stats(data, config['stats'])
+    data = data.dropna()
+    columns = ['created_at', 'updated_at', 'related_manga',
+               'recommendations', 'main_picture.medium', 'main_picture.large']
+    data = data.drop(columns=columns)
+    data = process_dates(data, config['time_diff'], config['start_season_year'])
+    data = preprocess_season(data, config)
+    data = preprocess_text(data, config)
+    data = preprocess_genres(data, config)
+    data = preprocess_studios(data, config)
+    data = preprocess_nsfw(data, config)
+    data = preprocess_source(data, config)
+    data = preprocess_status(data, config)
+    data = preprocess_media_type(data, config)
+    data = preprocess_rating(data, config)
+    data = preprocess_mean(data, config)
+    data = preprocess_popularity(data, config)
+    data = preprocess_num_scoring_users(data, config)
+    data = preprocess_num_episodes(data, config)
+    data = preprocess_average_episode_duration(data, config)
+    data = preprocess_stats(data, config)
     return data
