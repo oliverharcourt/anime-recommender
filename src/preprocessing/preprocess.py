@@ -10,39 +10,37 @@ import numpy as np
 import pandas as pd
 import textacy.preprocessing as tprep
 import torch
-from sklearn.preprocessing import (LabelEncoder, MinMaxScaler,
-                                   MultiLabelBinarizer, PowerTransformer,
-                                   StandardScaler)
+from pymilvus import MilvusClient
 from torch.utils.data import DataLoader, Dataset
 from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 
 #####################################
 #  Anime features and their format  #
 #####################################
-# 'id,' # Anime ID (integer)\
-# 🛑'title,' # Anime title (string)\
-# ✅'synopsis,' # Anime synopsis (string or null)\
-# ✅'mean,' # Mean score (float or null)\
-# ✅'popularity,' # Popularity rank (integer or null)\
-# 🛑'num_list_users,' # Number of users who have the anime in their list (integer)\
-# ✅'num_scoring_users,' # Number of users who have scored the anime (integer)\
-# ✅'nsfw,' # NSFW classification (white=sfw, gray=partially, black=nsfw) (string or null)\
-# ✅'genres,' # Genres (array of objects)\
-# ✅'studios,' # Studios (array of objects)\
-# ✅'num_episodes,' # Number of episodes (integer)\
-# ✅'average_episode_duration,' # Average duration of an episode (integer or null)\
-# ✅'status,' # Airing status (string)\
-# ✅'rating,' # Age rating (string or null) (g, pg, pg_13, r, r+, rx)\
-# ✅'source,' # Source (string or null)\
-# ✅'media_type,' # Media type (string)\
-# 🛑'created_at,' # Date of creation (string <date-time>)\
-# 🛑'updated_at,' # Date of last update (string <date-time>)\
-# ✅'start_season,' # Start season (object or null)\
-# ✅'start_date,' # Start date (string or null)\
-# ✅'end_date,' # End date (string or null)\
-# ✅'related_anime,' # Related anime (array of objects)\
-# 🛑'related_manga,' # Related manga (array of objects)\
-# 🛑'recommendations,' # Recommendations (array of objects)\
+# 'id,' # Anime ID (integer)
+# ✅'title,' # Anime title (string)
+# ✅'synopsis,' # Anime synopsis (string or null)
+# ✅'mean,' # Mean score (float or null)
+# ✅'popularity,' # Popularity rank (integer or null)
+# 🛑'num_list_users,' # Number of users who have the anime in their list (integer)
+# ✅'num_scoring_users,' # Number of users who have scored the anime (integer)
+# ✅'nsfw,' # NSFW classification (white=sfw, gray=partially, black=nsfw) (string or null)
+# ✅'genres,' # Genres (array of objects)
+# ✅'studios,' # Studios (array of objects)
+# ✅'num_episodes,' # Number of episodes (integer)
+# ✅'average_episode_duration,' # Average duration of an episode (integer or null)
+# ✅'status,' # Airing status (string)
+# ✅'rating,' # Age rating (string or null) (g, pg, pg_13, r, r+, rx)
+# ✅'source,' # Source (string or null)
+# ✅'media_type,' # Media type (string)
+# 🛑'created_at,' # Date of creation (string <date-time>)
+# 🛑'updated_at,' # Date of last update (string <date-time>)
+# ✅'start_season,' # Start season (object or null)
+# ✅'start_date,' # Start date (string or null)
+# ✅'end_date,' # End date (string or null)
+# ✅'related_anime,' # Related anime (array of objects)
+# 🛑'related_manga,' # Related manga (array of objects)
+# 🛑'recommendations,' # Recommendations (array of objects)
 # ✅'statistics' # Statistics (object or null)
 
 def load_model(path: str) -> object:
@@ -61,24 +59,15 @@ def load_model(path: str) -> object:
     return scaler
 
 
-def process_dates(data: pd.DataFrame, td_scaler_path: str, year_scaler_path: str) -> pd.DataFrame:
-    """
-    Preprocesses the dates in the given anime data batch.
-    Preprocesses: start_date, end_date, start_season.year
-
-    Args:
-        data (pandas.DataFrame): The input data batch.
-
-    Returns:
-        pandas.DataFrame: The preprocessed data. Time difference between
-                            start_date and end_date calculated and added as
-                            feature, start_season.year scaled. start_date and
-                            end_date columns dropped.
-    """
+def preprocess_dates(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     # 'start_date' (string or null)
     # 'end_date' (string or null)
     # 'start_season' (object or null)
     # 'start_season.year' (object or null)
+
+    td_scaler_path = config['time_diff']
+    year_scaler_path = config['start_season_year']
+
     def safe_date_convert(date) -> datetime.date:
         if pd.isna(date):
             return None
@@ -117,16 +106,6 @@ def process_dates(data: pd.DataFrame, td_scaler_path: str, year_scaler_path: str
 
 
 def preprocess_season(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'start_season' column in the given data batch by performing cyclical encoding.
-    Preprocesses: start_season.season
-    
-    Args:
-        data (pandas.DataFrame): The input data batch.
-
-    Returns:
-        pandas.DataFrame: The preprocessed data with cyclical encoding applied to the 'start_season.season' column.
-    """
     def cyclical_encode(data, col, max_val):
         data[col + '_sin'] = np.sin(2 * np.pi * data[col]/max_val)
         data[col + '_cos'] = np.cos(2 * np.pi * data[col]/max_val)
@@ -142,16 +121,6 @@ def preprocess_season(data: pd.DataFrame, config: dict) -> pd.DataFrame:
 
 
 def preprocess_text(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses synopsis and title data anime data batch.
-    Preprocesses: synopsis, title, related_anime
-
-    Args:
-        data (pandas.DataFrame): The input data batch.
-
-    Returns:
-        pandas.DataFrame: The DataFrame with the preprocessed text data.
-    """
     # 'synopsis' (string or null)
     # 'related_anime' (array of objects)
     def clean_text(text):
@@ -186,19 +155,7 @@ def preprocess_text(data: pd.DataFrame, config: dict) -> pd.DataFrame:
 
 
 def preprocess_genres(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'genres' column in the given data batch.
-    Preprocesses: genres
-
-    Args:
-        data (pandas.DataFrame): The input data batch.
-
-    Returns:
-        pandas.DataFrame: The data with the 'genres' column preprocessed by MultiLabelBinarizer.
-
-    """
     # 'genres' (array of objects)
-
     def process(entry):
         genres_set = set(genre['name'] for genre in entry)
         return genres_set
@@ -212,19 +169,7 @@ def preprocess_genres(data: pd.DataFrame, config: dict) -> pd.DataFrame:
 
 
 def preprocess_studios(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'studios' column in the given data using MultiLabelBinarizer.
-    Preprocesses: studios
-
-    Args:
-        data (pandas.DataFrame): The input data batch.
-
-    Returns:
-        pandas.DataFrame: The preprocessed data with the 'studios' column transformed.
-
-    """
     # 'studios' (array of objects, may be empty)
-
     def process(entry):
         studios_set = [studio['name'] for studio in entry]
         return studios_set
@@ -239,72 +184,7 @@ def preprocess_studios(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     return data
 
 
-def preprocess_nsfw(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'nsfw' column in the given data batch using LabelEncoder.
-    Preprocesses: nsfw
-
-    Args:
-        data (pandas.DataFrame): The input data batch.
-
-    Returns:
-        pandas.DataFrame: The preprocessed data with the 'nsfw' column encoded.
-
-    """
-    # 'nsfw' (white=sfw, gray=partially, black=nsfw) (string or null)
-    nsfw_encoder = load_model(config['nsfw'])
-    data['nsfw'] = nsfw_encoder.transform(data['nsfw'])
-    return data
-
-
-def preprocess_source(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'source' column in the given data using LabelEncoder.
-    Preprocesses: source
-
-    Args:
-        data (pandas.DataFrame): The input data batch.
-
-    Returns:
-        pandas.DataFrame: The data with the 'source' column encoded.
-
-    """
-    # 'source' (string or null)
-    source_encoder = load_model(config['source'])
-    data['source'] = source_encoder.transform(data['source'])
-    return data
-
-
-def preprocess_status(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'status' column of the given data using LabelEncoder.
-    Preprocesses: status
-
-    Parameters:
-    data (pandas.DataFrame): The input data batch.
-
-    Returns:
-    pandas.DataFrame: The data with the 'status' column encoded.
-
-    """
-    # 'status' (string)
-    status_encoder = load_model(config['status'])
-    data['status'] = status_encoder.transform(data['status'])
-    return data
-
-
 def preprocess_media_type(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'media_type' column of the given data using LabelEncoder.
-    Preprocesses: media_type
-
-    Parameters:
-    data (pandas.DataFrame): The input data batch.
-
-    Returns:
-    pandas.DataFrame: The data with the 'media_type' column encoded.
-
-    """
     # 'media_type' (string)
     # We might want to change media_type to better reflect the data
     # We might use the following rules:
@@ -313,16 +193,6 @@ def preprocess_media_type(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     # special = ('avg_ep_dur'<=1800 & 'num_episodes'<6) | ('avg_ep_dur' < 240)
     # This covers all cases, but the duration and num_ep thresholds seem suboptimal after some testing
     # thus we skip this for now
-    def filter_media_type(anime):
-        d = anime['average_episode_duration']
-        n = anime['num_episodes'] 
-        if d > 1800:
-            anime['media_type'] = 'movie'
-        elif d <= 1800 and n >= 6:
-            anime['media_type'] = 'tv'
-        elif (d <= 1800 and n < 6) or d < 240:
-            anime['media_type'] = 'special'
-        return anime
 
     data['media_type'] = data['media_type'].apply(lambda x: 'special' if x in {'ona', 'ova', 'tv_special'} else x)
     media_type_encoder = load_model(config['media_type'])
@@ -331,16 +201,6 @@ def preprocess_media_type(data: pd.DataFrame, config: dict) -> pd.DataFrame:
 
 
 def preprocess_rating(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'rating' column in the given data DataFrame.$
-    Preprocesses: rating
-
-    Args:
-        data (DataFrame): The input data batch.
-
-    Returns:
-        DataFrame: The modified DataFrame with the 'rating' column mapped to numerical values.
-    """
     # 'rating' (string or null) (g, pg, pg_13, r, r+, rx)
     rating_map = {
         "g": 0,
@@ -353,129 +213,6 @@ def preprocess_rating(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     data['rating'] = data['rating'].map(rating_map)
     return data
 
-
-def preprocess_mean(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'mean' feature of the given data using a standard scaler.
-    Preprocesses: mean
-
-    Args:
-        data (pandas.DataFrame): The input data batch.
-
-    Returns:
-        pandas.DataFrame: The preprocessed data with the 'mean' feature transformed using a standard scaler.
-    """
-    # 'mean' (float or null)
-    # This feature looks similar to a normal distribution, so we try a standard scaler
-    mean_scaler = load_model(config['mean'])
-    data['mean'] = mean_scaler.transform(data['mean'].values.reshape(-1, 1))
-    return data
-
-
-def preprocess_popularity(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'popularity' feature in the given data using standard scaling.
-    Preprocesses: popularity
-
-    Parameters:
-    data (pandas.DataFrame): The input data batch.
-
-    Returns:
-    pandas.DataFrame: The preprocessed data with the 'popularity' feature scaled using standard scaling.
-    """
-    # 'popularity' (integer or null)
-    # The distribution of this feature seems to get messed up for anything other than standard scaler
-    popularity_scaler = load_model(config['popularity'])
-    data['popularity'] = popularity_scaler.transform(data['popularity'].values.reshape(-1, 1))
-    return data
-
-
-def preprocess_num_scoring_users(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'num_scoring_users' feature in the given data using PowerTransformer (yeo-johnson).
-    Preprocesses: num_scoring_users
-
-    Parameters:
-    data (pandas.DataFrame): The input data batch.
-
-    Returns:
-    pandas.DataFrame: The preprocessed data with the 'num_scoring_users' feature scaled.
-    """
-    # 'num_scoring_users' (integer)
-    # This feature exhibits a long tail distribution, we try power transformer (yeo-johnson)
-    # This might not the best way to handle this feature
-    # Perhaps try https://arxiv.org/abs/2111.05956#:~:text=The%20visual%20world%20naturally%20exhibits,models%20based%20on%20deep%20learning.
-
-    popularity_scaler = load_model(config['num_scoring_users'])
-    data['num_scoring_users'] = popularity_scaler.transform(data['num_scoring_users'].values.reshape(-1, 1))
-    return data
-
-
-def preprocess_num_episodes(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'num_episodes' feature in the given data using a power transformer (yeo-johnson).
-    Preprocesses: num_episodes
-
-    Args:
-        data (pandas.DataFrame): The input data batch.
-
-    Returns:
-        pandas.DataFrame: The preprocessed data with the 'num_episodes' feature transformed.
-
-    """
-    # 'num_episodes' (integer)
-    # This feature exhibits a long tail distribution, we again try power transformer (yeo-johnson)
-    num_episodes_scaler = load_model(config['num_episodes'])
-    data['num_episodes'] = num_episodes_scaler.transform(data['num_episodes'].values.reshape(-1, 1))
-    return data
-
-
-def preprocess_average_episode_duration(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the 'average_episode_duration' feature in the given data using PowerTransformer (yeo-johnson).
-    Preprocesses: average_episode_duration
-
-    Parameters:
-    data (pandas.DataFrame): The input data batch.
-
-    Returns:
-    pandas.DataFrame: The data with the 'average_episode_duration' feature preprocessed.
-    """
-    # 'average_episode_duration' (integer or null)
-    # This feature might also benefit from power transformer (yeo-johnson)
-    avg_ep_scaler = load_model(config['average_episode_duration'])
-    data['average_episode_duration'] = avg_ep_scaler.transform(data['average_episode_duration'].values.reshape(-1, 1))
-    return data
-
-
-def preprocess_stats(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the statistics features of the given data using PowerTransformer (yeo-johnson).
-    Preprocesses: statistics.status.watching, statistics.status.completed, statistics.status.on_hold,
-
-    Args:
-        data (pandas.DataFrame): The input data batch.
-
-    Returns:
-        pandas.DataFrame: The preprocessed data with transformed statistics features.
-    """
-    # 'statistics' (object or null)
-    # The feature 'num_list_users' contains inconsistent data
-    # We will drop this feature, and instead use 'statistics.num_list_users'
-    data = data.drop(columns=['num_list_users'])
-    watching_scaler = load_model(config['statistics_status_watching'])
-    data['statistics.status.watching'] = watching_scaler.transform(data['statistics.status.watching'].values.reshape(-1, 1))
-    completed_scaler = load_model(config['statistics_status_completed'])
-    data['statistics.status.completed'] = completed_scaler.transform(data['statistics.status.completed'].values.reshape(-1, 1))
-    on_hold_scaler = load_model(config['statistics_status_on_hold'])
-    data['statistics.status.on_hold'] = on_hold_scaler.transform(data['statistics.status.on_hold'].values.reshape(-1, 1))
-    dropped_scaler = load_model(config['statistics_status_dropped'])
-    data['statistics.status.dropped'] = dropped_scaler.transform(data['statistics.status.dropped'].values.reshape(-1, 1))
-    plan_to_watch_scaler = load_model(config['statistics_status_plan_to_watch'])
-    data['statistics.status.plan_to_watch'] = plan_to_watch_scaler.transform(data['statistics.status.plan_to_watch'].values.reshape(-1, 1))
-    num_list_users_scaler = load_model(config['statistics_num_list_users'])
-    data['statistics.num_list_users'] = num_list_users_scaler.transform(data['statistics.num_list_users'].values.reshape(-1, 1))
-    return data
 
 class TextDataset(Dataset):
     def __init__(self, dataframe, tokenizer, max_length=512):
@@ -493,25 +230,18 @@ class TextDataset(Dataset):
         return idx, inputs['input_ids'].squeeze(0), inputs['attention_mask'].squeeze(0)
 
 
-def generate_embeddings(data: pd.DataFrame, model_path: str, device: str) -> torch.Tensor:
-    """
-    Generates embeddings of the 'related' and 'synopsis' columnsfor the given data using the provided BERT model.
-
-    Args:
-        data (pd.DataFrame): The input data batch.
-        model_path (str): The path to the BERT model.
-        device (str): The device to use for generating embeddings.
-
-    Returns:
-        torch.Tensor: The embeddings generated by the BERT model.
-    """
+def generate_embeddings(data: pd.DataFrame, model_path: str, device: str, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     # Initialize tokenizer
     tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
 
+    # Extract relevant columns
+    synopsis_df = data[['id', 'synopsis']].copy()
+    related_df = data[['id', 'related']].copy()
+
     # Create dataset
-    synopsis_dataset = TextDataset(data[['synopsis']], tokenizer)
-    related_dataset = TextDataset(data[['related']], tokenizer)
+    synopsis_dataset = TextDataset(synopsis_df, tokenizer)
+    related_dataset = TextDataset(related_df, tokenizer)
 
     # Create DataLoaders
     loader_synopsis = DataLoader(synopsis_dataset, batch_size=32, shuffle=False, num_workers=2)
@@ -520,7 +250,7 @@ def generate_embeddings(data: pd.DataFrame, model_path: str, device: str) -> tor
     loaders = [loader_synopsis, loader_related]
 
     # Pre-allocate embedding tensors
-    embedding_sizes = 768  # For BERT models
+    embedding_sizes = config['embedding_dim']
     embedding_tensors = {
         'synopsis_emb': torch.zeros(len(synopsis_dataset), embedding_sizes),
         'related_emb': torch.zeros(len(related_dataset), embedding_sizes),
@@ -544,74 +274,191 @@ def generate_embeddings(data: pd.DataFrame, model_path: str, device: str) -> tor
                 print(indices[0])
             input_ids, attention_masks = input_ids.to(device), attention_masks.to(device)
             with torch.no_grad():
-                embeddings = model(input_ids=input_ids, attention_mask=attention_masks).last_hidden_state[:, 0, :].detach()
-                embedding_tensors[tensor_key][indices.cpu()] = embeddings.cpu()
+                # Extract the CLS token embeddings from the last hidden state
+                embeddings = model(input_ids=input_ids, attention_mask=attention_masks).last_hidden_state[:, 0, :].detach().cpu()
+                embedding_tensors[tensor_key][indices.cpu()] = embeddings
 
-    synopsis_tensor = embedding_tensors['synopsis_emb'].clone().detach()
-    related_tensor = embedding_tensors['related_emb'].clone().detach()
-    embedding_tensor = torch.cat((synopsis_tensor, related_tensor), dim=1)
-    return embedding_tensor
+    # Dataframes of embeddings
+    synopsis_tensor = embedding_tensors['synopsis_emb'].clone().detach().numpy()
+    related_tensor = embedding_tensors['related_emb'].clone().detach().numpy()
+    
+    synopsis_vectors = [synopsis_tensor[i].tolist() for i in range(synopsis_tensor.shape[0])]
+    related_vectors = [related_tensor[i].tolist() for i in range(related_tensor.shape[0])]
+
+    synopsis_df2 = pd.DataFrame({'synopsis_embedding': synopsis_vectors})
+    related_df2 = pd.DataFrame({'related_embedding': related_vectors})
+
+    # We only need the id column from the original dataframes
+    synopsis_df.drop(columns=['synopsis'], inplace=True)
+    related_df.drop(columns=['related'], inplace=True)
+
+    # Concatenate the embeddings with the id column
+    synopsis_df_concat = pd.concat([synopsis_df, synopsis_df2], axis=1, ignore_index=True)
+    synopsis_df_concat.rename(columns={0: 'id', 1: 'synopsis_embedding'}, inplace=True)
+
+    related_df_concat = pd.concat([related_df, related_df2], axis=1, ignore_index=True)
+    related_df_concat.rename(columns={0: 'id', 1: 'related_embedding'}, inplace=True)
+
+    return synopsis_df_concat, related_df_concat
 
 
 def handle_studio_genres(data: pd.DataFrame) -> pd.DataFrame:
-    genres_studios_df = data[['genres', 'studios']].copy()
+    genres_studios_df = data[['id', 'genres', 'studios']].copy()
 
     f = lambda x: np.array(x).reshape(-1,)
     genres_studios_df['genres'] = genres_studios_df['genres'].apply(f)
     genres_studios_df['studios'] = genres_studios_df['studios'].apply(f)
 
-    g = lambda x: np.concatenate((np.array([x['genres']]), np.array([x['studios']])), axis=1).tolist()
-    genres_studios_df = genres_studios_df.apply(g, axis=1)
+    g = lambda x: np.concatenate((np.array([x['genres']]), np.array([x['studios']])), axis=1).reshape(-1,)
+    genres_studios_df['genres_studios_flattened'] = genres_studios_df.apply(g, axis=1)
+    genres_studios_df.drop(columns=['genres', 'studios'], inplace=True)
 
-    genres_studios_df = genres_studios_df.apply(np.ndarray.tolist)
-    genres_studios_tensor = torch.Tensor(genres_studios_df.values.tolist())
+    data.drop(columns=['genres', 'studios'], inplace=True)
 
-    return genres_studios_tensor
+    ret = pd.DataFrame(genres_studios_df)
+    #print(f'genres_studios_df: {ret}')
+
+    return ret
 
 
-def process(data: pd.DataFrame, config: dict) -> pd.DataFrame:
-    """
-    Preprocesses the given data based on the provided configuration.
-
-    Args:
-        data (pd.DataFrame): The input data batch to be preprocessed.
-        config (dict): The configuration containing paths to sklearn scalers for each preprocessing step.
-
-    Returns:
-        pd.DataFrame: The preprocessed data.
-    """
-    data = data.dropna()
-    columns = ['created_at', 'updated_at', 'related_manga',
-               'recommendations', 'main_picture.medium', 'main_picture.large']
-    data = data.drop(columns=columns)
-    data = process_dates(data, config['time_diff'], config['start_season_year'])
-    data = preprocess_season(data, config)
-    data = preprocess_text(data, config)
-    data = preprocess_genres(data, config)
-    data = preprocess_studios(data, config)
-    #data = preprocess_nsfw(data, config)
-    #data = preprocess_source(data, config)
-    #data = preprocess_status(data, config)
-    data = preprocess_media_type(data, config)
-    data = preprocess_rating(data, config)
-    #data = preprocess_mean(data, config)
-    #data = preprocess_popularity(data, config)
-    #data = preprocess_num_scoring_users(data, config)
-    #data = preprocess_num_episodes(data, config)
-    #data = preprocess_average_episode_duration(data, config)
-    #data = preprocess_stats(data, config)
-    for col, path in config['simple'].items():
-        model = load_model(path)
-        data[col] = model.transform(data[col].values.reshape(-1, 1))
+def create_embeddings(data: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model_path = config['model_path']
-    embedding_tensor = generate_embeddings(data.copy(), model_path, device)
+    synopsis_df, related_df = generate_embeddings(data, model_path, device, config)
+    
+    data.drop(columns=['synopsis', 'related'], inplace=True)
+    return synopsis_df, related_df
 
-    genres_studios_tensor = handle_studio_genres(data)
+
+def get_existing_ids(data: pd.DataFrame, vector_db: MilvusClient, collection_name: str) -> list:
+
+    ids = data['id'].tolist()
     
-    data = data.drop(columns=['synopsis', 'related', 'genres', 'studios'])
-    data_tensor = torch.Tensor(data.values)
-    data_tensor = torch.cat((data_tensor, embedding_tensor, genres_studios_tensor.squeeze()), dim=1)
+    vectors = vector_db.get(
+        collection_name=collection_name,
+        ids=ids
+    )
+    print(f"Found {len(ids)} embeddings in the database.")
     
-    return data
+    retrieved_ids = {vector.id for vector in vectors if vector is not None}
+
+    return retrieved_ids
+
+def sep_and_concat_cols(data: pd.DataFrame, data_np: np.ndarray, cols_to_seperate: list) -> np.ndarray:
+    
+    col_idxs = {}
+
+    seperate_columns = {}
+
+    for col in cols_to_seperate:
+        col_idx = data.columns.get_loc(col)
+        col_idxs[col] = col_idx
+
+    for col, idx in col_idxs.items():
+        if isinstance(data_np[0, idx], np.ndarray) or isinstance(data_np[0, idx], list):
+            col_data = data_np[:, idx]
+            print(f"col_idx: {idx} col_name: {col} col_data: {col_data}")
+            print(f'data_np shape: {data_np.shape} col_data shape: {col_data.shape}')
+            col_data = np.vstack(col_data)
+            data_np = np.concatenate([data_np, col_data], axis=1)
+
+            # seperate text embedding columns for seperate distance calculations
+            if col != 'genres_studios_flattened':
+                seperate_columns[col] = col_data
+            print(f'new data_np shape: {data_np.shape}')
+    
+    print(f'final data_np shape: {data_np.shape}')
+    
+    data_np = np.delete(data_np, list(col_idxs.values()), axis=1)
+    
+    return data_np, seperate_columns
+
+
+def process(data: pd.DataFrame, config: dict, vector_db: MilvusClient) -> None:
+
+    data = data.copy()
+
+    columns = ['created_at', 'updated_at', 'related_manga',
+               'recommendations', 'main_picture.medium', 'main_picture.large']
+    data.drop(columns=columns, inplace=True)
+    data.dropna(inplace=True)
+    
+    #seen_ids = get_existing_ids(data, vector_db, config['collection_name'])
+
+    #data = data[~data['id'].isin(seen_ids)]
+    
+    # Handle features with special preprocessing methods
+    func_map = {
+        'start_date end_date start_season.year': preprocess_dates,
+        'start_season.season': preprocess_season,
+        'synopsis title related_anime': preprocess_text,
+        'genres': preprocess_genres,
+        'studios': preprocess_studios,
+        'media_type': preprocess_media_type,
+        'rating': preprocess_rating
+    }
+
+    for col, func in func_map.items():
+        cols = set(col.split())
+        if not cols.issubset(data.columns):
+            print(f"Columns {col} not found in the dataset, skipping...")
+            continue
+        data = func(data, config)
+
+    # Handle features with simple preprocessing methods
+    for col, path in config['simple'].items():
+        if col not in data.columns:
+            print(f"Column {col} not found in the dataset, skipping...")
+            continue
+        model = load_model(path)
+        data[col] = model.transform(data[col].values.reshape(-1, 1))
+
+    synopsis_df, related_df = create_embeddings(data, config)
+    genres_studios_df = handle_studio_genres(data)
+    
+    # join all data, transform to np array and insert into vector db
+
+    print(f'synsopsis_df columns: {synopsis_df.columns}')
+    print(f'related_df columns: {related_df.columns}')
+    print(f'genres_studios_df columns: {genres_studios_df.columns}')
+    print(f'data columns: {data.columns}')
+
+    data = data.merge(synopsis_df, on='id', how='left')
+    data = data.merge(related_df, on='id', how='left')
+    data = data.merge(genres_studios_df, on='id', how='left')
+
+    print(f'Final dim: {data.shape}')
+
+    #return data
+
+    data_np = data.to_numpy()
+
+    columns_to_seperate = ['genres_studios_flattened', 'synopsis_embedding', 'related_embedding']
+
+    data_np, seperated_columns = sep_and_concat_cols(data, data_np, columns_to_seperate)
+
+    synopsis_embeddings = seperated_columns['synopsis_embedding']
+    related_embeddings = seperated_columns['related_embedding']
+
+    print(f'data_np shape: {data_np.shape}')
+
+    #return data, data_np, synopsis_embeddings, related_embeddings
+
+    res_data = vector_db.insert(
+        collection_name=config['collection_name']['data'],
+        records=data_np
+    )
+    print(f"res_data: {res_data}")
+
+    res_synopsis = vector_db.insert(
+        collection_name=config['collection_name']['synopsis'],
+        records=synopsis_embeddings
+    )
+    print(f"res_synopsis: {res_synopsis}")
+
+    res_related = vector_db.insert(
+        collection_name=config['collection_name']['related'],
+        records=related_embeddings
+    )
+    print(f"res_related: {res_related}")
