@@ -1,7 +1,7 @@
 import json
 import os
 import random
-import requests
+from dataclasses import dataclass
 
 import pandas as pd
 from pymilvus import MilvusClient
@@ -74,3 +74,10 @@ class Recommender:
             query_records=user_anime_embeddings,
             top_k=limit
         )
+
+
+@dataclass
+class Recommendation:
+    anime_id: int
+    title: str
+    similarity: float
