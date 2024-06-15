@@ -183,3 +183,6 @@ checkpoints/
 
 # Pickle files
 *.pkl
+
+# Docker
+docker/
