@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 import textacy.preprocessing as tprep
 import torch
-from pymilvus import MilvusClient
 from torch.utils.data import DataLoader, Dataset
 from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 
@@ -71,15 +70,14 @@ def preprocess_dates(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     def safe_date_convert(date) -> datetime.date:
         if pd.isna(date):
             return None
-        if type(date) is float:
+        if isinstance(date, float):
             return datetime.strptime(str(int(date)), '%Y').date()
-        if type(date) is str:
-            if re.compile("\d{4}-\d{2}-\d{2}").match(date):
+        if isinstance(date, str):
+            if re.compile(r"\d{4}-\d{2}-\d{2}").match(date):
                 return datetime.strptime(date, '%Y-%m-%d').date()
-            elif re.compile("\d{4}-\d{2}").search(date):
+            if re.compile(r"\d{4}-\d{2}").search(date):
                 return datetime.strptime(date, '%Y-%m').date()
-            else:
-                return datetime.strptime(date, '%Y').date()
+            return datetime.strptime(date, '%Y').date()
         raise ValueError(f"Invalid date format: {date}, {type(date)}")
 
     def time_diff(start_date, end_date):
@@ -87,8 +85,7 @@ def preprocess_dates(data: pd.DataFrame, config: dict) -> pd.DataFrame:
             return None
         if start_date <= end_date:
             return (end_date - start_date).days
-        else:
-            return (start_date - end_date).days
+        return (start_date - end_date).days
 
     # Convert dates to datetime objects
     data['start_date'] = data['start_date'].apply(safe_date_convert)
@@ -101,7 +98,8 @@ def preprocess_dates(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     data['time_diff'] = td_scaler.transform(data['time_diff'].values.reshape(-1, 1))
     # Scale start_season.year
     year_scaler = load_model(year_scaler_path)
-    data['start_season.year'] = year_scaler.transform(data['start_season.year'].values.reshape(-1, 1))
+    data['start_season.year'] = year_scaler.transform(data['start_season.year']
+                                                      .values.reshape(-1, 1))
     return data
 
 
@@ -138,7 +136,7 @@ def preprocess_text(data: pd.DataFrame, config: dict) -> pd.DataFrame:
         text = re.sub(r"\s+", " ", text)  # Normalize whitespace
         text = text.strip()  # Strip whitespace from the beginning and the end
         return text
-    
+
     def preprocess_related(data):
         f = lambda x: [entry['node']['title'] for entry in ast.literal_eval(x)]
         cr = lambda x: [clean_text(i) for i in f(x)]
@@ -262,7 +260,7 @@ def generate_embeddings(data: pd.DataFrame, model_path: str, device: str, config
             return 'related_emb'
 
     model = DistilBertForMaskedLM.from_pretrained(model_path, device_map=device).base_model
-    
+
     # Generate embeddings
     for loader in loaders:
         tensor_key = get_tensor_key(loader)
@@ -308,7 +306,7 @@ def create_embeddings(data: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, p
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model_path = config['model_path']
     synopsis_df, related_df = generate_embeddings(data, model_path, device, config)
-    
+
     data.drop(columns=['synopsis', 'related'], inplace=True)
     return synopsis_df, related_df
 
