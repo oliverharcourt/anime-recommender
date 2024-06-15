@@ -156,31 +156,29 @@ def preprocess_text(data: pd.DataFrame, config: dict) -> pd.DataFrame:
 
 def preprocess_genres(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     # 'genres' (array of objects)
-    def process(entry):
+    def extract_genres(entry):
         genres_set = set(genre['name'] for genre in entry)
         return genres_set
 
     data['genres'] = data['genres'].apply(ast.literal_eval)
-    data['genres'] = data['genres'].apply(process)
-    
+    data['genres'] = data['genres'].apply(extract_genres)
+
     genre_mlb = load_model(config['genres'])
-    data['genres'] = data['genres'].apply(lambda x: genre_mlb.transform([x]).reshape(1, -1))
+    data['genres'] = genre_mlb.transform(data['genres']).tolist()
     return data
 
 
 def preprocess_studios(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     # 'studios' (array of objects, may be empty)
-    def process(entry):
+    def extract_studio_names(entry):
         studios_set = [studio['name'] for studio in entry]
         return studios_set
 
     data['studios'] = data['studios'].apply(ast.literal_eval)
-    data['studios'] = data['studios'].apply(process)
+    data['studios'] = data['studios'].apply(extract_studio_names)
 
     studio_enc = load_model(config['studios'])
-    studios_hashed = studio_enc.transform(data['studios']).toarray()
-    data['studios'] = [hash for hash in studios_hashed]
-    data['studios'] = data['studios'].apply(lambda x: x.reshape(1, -1))
+    data['studios'] = studio_enc.transform(data['studios']).toarray().tolist()
     return data
 
 
@@ -281,44 +279,28 @@ def generate_embeddings(data: pd.DataFrame, model_path: str, device: str, config
     # Dataframes of embeddings
     synopsis_tensor = embedding_tensors['synopsis_emb'].clone().detach().numpy()
     related_tensor = embedding_tensors['related_emb'].clone().detach().numpy()
-    
+
     synopsis_vectors = [synopsis_tensor[i].tolist() for i in range(synopsis_tensor.shape[0])]
     related_vectors = [related_tensor[i].tolist() for i in range(related_tensor.shape[0])]
-
-    synopsis_df2 = pd.DataFrame({'synopsis_embedding': synopsis_vectors})
-    related_df2 = pd.DataFrame({'related_embedding': related_vectors})
 
     # We only need the id column from the original dataframes
     synopsis_df.drop(columns=['synopsis'], inplace=True)
     related_df.drop(columns=['related'], inplace=True)
 
-    # Concatenate the embeddings with the id column
-    synopsis_df_concat = pd.concat([synopsis_df, synopsis_df2], axis=1, ignore_index=True)
-    synopsis_df_concat.rename(columns={0: 'id', 1: 'synopsis_embedding'}, inplace=True)
+    # Merge the embeddings with the id column
+    synopsis_df_merge = pd.DataFrame({'id': synopsis_df['id'], 'synopsis_embedding': synopsis_vectors})
+    related_df_merge = pd.DataFrame({'id': related_df['id'], 'related_embedding': related_vectors})
 
-    related_df_concat = pd.concat([related_df, related_df2], axis=1, ignore_index=True)
-    related_df_concat.rename(columns={0: 'id', 1: 'related_embedding'}, inplace=True)
-
-    return synopsis_df_concat, related_df_concat
+    return synopsis_df_merge, related_df_merge
 
 
 def handle_studio_genres(data: pd.DataFrame) -> pd.DataFrame:
-    genres_studios_df = data[['id', 'genres', 'studios']].copy()
 
     f = lambda x: np.array(x).reshape(-1,)
-    genres_studios_df['genres'] = genres_studios_df['genres'].apply(f)
-    genres_studios_df['studios'] = genres_studios_df['studios'].apply(f)
+    data['genres'] = data['genres'].apply(f)
+    data['studios'] = data['studios'].apply(f)
 
-    g = lambda x: np.concatenate((np.array([x['genres']]), np.array([x['studios']])), axis=1).reshape(-1,)
-    genres_studios_df['genres_studios_flattened'] = genres_studios_df.apply(g, axis=1)
-    genres_studios_df.drop(columns=['genres', 'studios'], inplace=True)
-
-    data.drop(columns=['genres', 'studios'], inplace=True)
-
-    ret = pd.DataFrame(genres_studios_df)
-    #print(f'genres_studios_df: {ret}')
-
-    return ret
+    return data
 
 
 def create_embeddings(data: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -367,18 +349,10 @@ def process(data: pd.DataFrame, config: dict) -> None:
         data[col] = model.transform(data[col].values.reshape(-1, 1))
 
     synopsis_df, related_df = create_embeddings(data, config)
-    genres_studios_df = handle_studio_genres(data)
-    
-    # join all data, transform to np array and insert into vector db
 
-    print(f'synsopsis_df columns: {synopsis_df.columns}')
-    print(f'related_df columns: {related_df.columns}')
-    print(f'genres_studios_df columns: {genres_studios_df.columns}')
-    print(f'data columns: {data.columns}')
-
+    # Join all data
     data = data.merge(synopsis_df, on='id', how='left')
     data = data.merge(related_df, on='id', how='left')
-    data = data.merge(genres_studios_df, on='id', how='left')
 
     print(f'Final dim: {data.shape}')
 
