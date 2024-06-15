@@ -41,7 +41,12 @@ class Recommender:
         # TODO add new anime info to dataset
         # TODO prepeocess new anime info (this also adds their embeddings to the vector database)
 
-    def recommend(self, user_name, limit):
+    def get_combined_recommendations(self, user_anime_embeddings: dict, limit: int):
+        # TODO implement bulk vector search
+        pass
+
+
+    def recommend(self, user_name: str, limit: int):
         # Get users anime list
         user_anime_list = self.get_user_anime_list(user_name)
         
@@ -63,17 +68,14 @@ class Recommender:
             ids=anime_ids
         )
 
-        for vec in user_anime_embeddings:
-            # TODO for each vector, perform a similarity search to get similar anime
-            # then choose the topk recommendations
-            print(vec)
+        #recommendations = self.get_combined_recommendations(user_anime_embeddings, limit)
 
-        # Get topk combined recommendations
+        """ # Get topk combined recommendations
         recommendations_combined = self.vector_db.search(
             collection_name=self.config['collection_name'],
             query_records=user_anime_embeddings,
             top_k=limit
-        )
+        ) """
 
 
 @dataclass
