@@ -331,51 +331,7 @@ def create_embeddings(data: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, p
     return synopsis_df, related_df
 
 
-def get_existing_ids(data: pd.DataFrame, vector_db: MilvusClient, collection_name: str) -> list:
-
-    ids = data['id'].tolist()
-    
-    vectors = vector_db.get(
-        collection_name=collection_name,
-        ids=ids
-    )
-    print(f"Found {len(ids)} embeddings in the database.")
-    
-    retrieved_ids = {vector.id for vector in vectors if vector is not None}
-
-    return retrieved_ids
-
-def sep_and_concat_cols(data: pd.DataFrame, data_np: np.ndarray, cols_to_seperate: list) -> np.ndarray:
-    
-    col_idxs = {}
-
-    seperate_columns = {}
-
-    for col in cols_to_seperate:
-        col_idx = data.columns.get_loc(col)
-        col_idxs[col] = col_idx
-
-    for col, idx in col_idxs.items():
-        if isinstance(data_np[0, idx], np.ndarray) or isinstance(data_np[0, idx], list):
-            col_data = data_np[:, idx]
-            print(f"col_idx: {idx} col_name: {col} col_data: {col_data}")
-            print(f'data_np shape: {data_np.shape} col_data shape: {col_data.shape}')
-            col_data = np.vstack(col_data)
-            data_np = np.concatenate([data_np, col_data], axis=1)
-
-            # seperate text embedding columns for seperate distance calculations
-            if col != 'genres_studios_flattened':
-                seperate_columns[col] = col_data
-            print(f'new data_np shape: {data_np.shape}')
-    
-    print(f'final data_np shape: {data_np.shape}')
-    
-    data_np = np.delete(data_np, list(col_idxs.values()), axis=1)
-    
-    return data_np, seperate_columns
-
-
-def process(data: pd.DataFrame, config: dict, vector_db: MilvusClient) -> None:
+def process(data: pd.DataFrame, config: dict) -> None:
 
     data = data.copy()
 
@@ -383,11 +339,7 @@ def process(data: pd.DataFrame, config: dict, vector_db: MilvusClient) -> None:
                'recommendations', 'main_picture.medium', 'main_picture.large']
     data.drop(columns=columns, inplace=True)
     data.dropna(inplace=True)
-    
-    #seen_ids = get_existing_ids(data, vector_db, config['collection_name'])
 
-    #data = data[~data['id'].isin(seen_ids)]
-    
     # Handle features with special preprocessing methods
     func_map = {
         'start_date end_date start_season.year': preprocess_dates,
@@ -430,35 +382,6 @@ def process(data: pd.DataFrame, config: dict, vector_db: MilvusClient) -> None:
 
     print(f'Final dim: {data.shape}')
 
-    #return data
+    print(f"Data shape at process method end: {data.shape}")
 
-    data_np = data.to_numpy()
-
-    columns_to_seperate = ['genres_studios_flattened', 'synopsis_embedding', 'related_embedding']
-
-    data_np, seperated_columns = sep_and_concat_cols(data, data_np, columns_to_seperate)
-
-    synopsis_embeddings = seperated_columns['synopsis_embedding']
-    related_embeddings = seperated_columns['related_embedding']
-
-    print(f'data_np shape: {data_np.shape}')
-
-    #return data, data_np, synopsis_embeddings, related_embeddings
-
-    res_data = vector_db.insert(
-        collection_name=config['collection_name']['data'],
-        records=data_np
-    )
-    print(f"res_data: {res_data}")
-
-    res_synopsis = vector_db.insert(
-        collection_name=config['collection_name']['synopsis'],
-        records=synopsis_embeddings
-    )
-    print(f"res_synopsis: {res_synopsis}")
-
-    res_related = vector_db.insert(
-        collection_name=config['collection_name']['related'],
-        records=related_embeddings
-    )
-    print(f"res_related: {res_related}")
+    return data
