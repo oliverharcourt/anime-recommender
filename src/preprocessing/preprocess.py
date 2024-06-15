@@ -42,7 +42,7 @@ from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 # 🛑'recommendations,' # Recommendations (array of objects)
 # ✅'statistics' # Statistics (object or null)
 
-def load_model(path: str) -> object:
+def _load_model(path: str) -> object:
     """
     Loads a scaler object from the given path.
 
@@ -58,7 +58,19 @@ def load_model(path: str) -> object:
     return scaler
 
 
-def preprocess_dates(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+def _preprocess_dates(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """
+    Preprocesses the dates in the given DataFrame according to the provided configuration.
+
+    Args:
+    data (pd.DataFrame): The DataFrame to preprocess.
+    config (dict): The configuration dict containing paths to the time difference and
+    start season year scalers.
+
+    Returns:
+    pd.DataFrame: The preprocessed DataFrame.
+    """
+
     # 'start_date' (string or null)
     # 'end_date' (string or null)
     # 'start_season' (object or null)
@@ -94,22 +106,35 @@ def preprocess_dates(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     data['time_diff'] = data.apply(lambda x: time_diff(x['start_date'], x['end_date']), axis=1)
     data = data.drop(columns=['start_date', 'end_date'])
     # Scale time_diff
-    td_scaler = load_model(td_scaler_path)
+    td_scaler = _load_model(td_scaler_path)
     data['time_diff'] = td_scaler.transform(data['time_diff'].values.reshape(-1, 1))
     # Scale start_season.year
-    year_scaler = load_model(year_scaler_path)
+    year_scaler = _load_model(year_scaler_path)
     data['start_season.year'] = year_scaler.transform(data['start_season.year']
                                                       .values.reshape(-1, 1))
     return data
 
 
-def preprocess_season(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+def _preprocess_season(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """
+    Preprocesses the 'start_season.season' column in the given DataFrame according to the provided configuration.
+    The preprocessing includes applying a cyclical encoding to create sine and cosine features.
+
+    Args:
+    data (pd.DataFrame): The DataFrame to preprocess.
+    config (dict): The configuration dict containing the path to the season encoder model.
+
+    Returns:
+    pd.DataFrame: The preprocessed DataFrame with the original 'start_season.season' column replaced
+    by its sine and cosine features.
+    """
+
     def cyclical_encode(data, col, max_val):
         data[col + '_sin'] = np.sin(2 * np.pi * data[col]/max_val)
         data[col + '_cos'] = np.cos(2 * np.pi * data[col]/max_val)
         return data
 
-    season_encoder = load_model(config['start_season_season'])
+    season_encoder = _load_model(config['start_season_season'])
     data['start_season.season'] = season_encoder.transform(data['start_season.season'])
 
     # Apply the cyclical_encode function to create sine and cosine features
@@ -118,7 +143,23 @@ def preprocess_season(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     return data
 
 
-def preprocess_text(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+def _preprocess_text(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """
+    Preprocesses the 'synopsis' 'title', and 'related_anime' columns in the given DataFrame.
+    The preprocessing includes cleaning the text, normalizing Unicode characters,
+    removing HTML tags, source citations, and MAL citations, and normalizing whitespace.
+    It also preprocesses related anime by sorting them and joining them into a single string.
+
+    Args:
+    data (pd.DataFrame): The DataFrame to preprocess.
+    config (dict): Not used in this method but included for consistency with
+    other preprocessing methods.
+
+    Returns:
+    pd.DataFrame: The preprocessed DataFrame with the original 'synopsis' 'title',
+    'related_anime' columns replaced by their cleaned and preprocessed versions.
+    """
+
     # 'synopsis' (string or null)
     # 'related_anime' (array of objects)
     def clean_text(text):
@@ -152,7 +193,20 @@ def preprocess_text(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     return data
 
 
-def preprocess_genres(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+def _preprocess_genres(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """
+    Preprocesses the 'genres' column in the given DataFrame.
+    The preprocessing includes transforming the list of genres using a pre-trained MultiLabelBinarizer.
+
+    Args:
+    data (pd.DataFrame): The DataFrame to preprocess.
+    config (dict): The configuration dict containing the path to the genre MultiLabelBinarizer model.
+
+    Returns:
+    pd.DataFrame: The preprocessed DataFrame with the original 'genres' column replaced
+    by a binary array representing the presence of each genre.
+    """
+
     # 'genres' (array of objects)
     def extract_genres(entry):
         genres_set = set(genre['name'] for genre in entry)
@@ -161,12 +215,25 @@ def preprocess_genres(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     data['genres'] = data['genres'].apply(ast.literal_eval)
     data['genres'] = data['genres'].apply(extract_genres)
 
-    genre_mlb = load_model(config['genres'])
+    genre_mlb = _load_model(config['genres'])
     data['genres'] = genre_mlb.transform(data['genres']).tolist()
     return data
 
 
-def preprocess_studios(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+def _preprocess_studios(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """
+    Preprocesses the 'studios' column in the given DataFrame.
+    The preprocessing includes transforming the list of studios using a pre-trained FeatureHasher.
+
+    Args:
+    data (pd.DataFrame): The DataFrame to preprocess.
+    config (dict): The configuration dict containing the path to the studio FeatureHasher model.
+
+    Returns:
+    pd.DataFrame: The preprocessed DataFrame with the original 'studios' column replaced
+    by a binary arrays representing the presence of each studio.
+    """
+
     # 'studios' (array of objects, may be empty)
     def extract_studio_names(entry):
         studios_set = [studio['name'] for studio in entry]
@@ -175,28 +242,58 @@ def preprocess_studios(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     data['studios'] = data['studios'].apply(ast.literal_eval)
     data['studios'] = data['studios'].apply(extract_studio_names)
 
-    studio_enc = load_model(config['studios'])
+    studio_enc = _load_model(config['studios'])
     data['studios'] = studio_enc.transform(data['studios']).toarray().tolist()
     return data
 
 
-def preprocess_media_type(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+def _preprocess_media_type(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """
+    Preprocesses the 'media_type' column in the given DataFrame.
+    The preprocessing includes recategorizing ona, ova and tv_special to special,
+    and then applying a pre-trained LabelEncoder.
+
+    Args:
+    data (pd.DataFrame): The DataFrame to preprocess.
+    config (dict): The configuration dict containing the path to the media_type encoder model.
+
+    Returns:
+    pd.DataFrame: The preprocessed DataFrame with the original 'media_type' column
+    replaced by the encoded media_type.
+    """
+
     # 'media_type' (string)
     # We might want to change media_type to better reflect the data
     # We might use the following rules:
     # movie = 'avg_ep_dur'>1800
     # tv = ('avg_ep_dur'<=1800 & 'num_episodes'>=6)
     # special = ('avg_ep_dur'<=1800 & 'num_episodes'<6) | ('avg_ep_dur' < 240)
-    # This covers all cases, but the duration and num_ep thresholds seem suboptimal after some testing
-    # thus we skip this for now
+    # This covers all cases, but the duration and num_ep thresholds seem suboptimal
+    # after some testing, thus we skip this for now
 
-    data['media_type'] = data['media_type'].apply(lambda x: 'special' if x in {'ona', 'ova', 'tv_special'} else x)
-    media_type_encoder = load_model(config['media_type'])
+    f = lambda x: 'special' if x in {'ona', 'ova', 'tv_special'} else x
+    data['media_type'] = data['media_type'].apply(f)
+    media_type_encoder = _load_model(config['media_type'])
     data['media_type'] = media_type_encoder.transform(data['media_type'])
     return data
 
 
-def preprocess_rating(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+def _preprocess_rating(data: pd.DataFrame, config: dict) -> pd.DataFrame:
+    """
+    Preprocesses the 'rating' column in the given DataFrame.
+    The preprocessing includes mapping the 'rating' column from a string representation
+    of a rating to an integer representation.
+
+    Args:
+    data (pd.DataFrame): The DataFrame to preprocess.
+    config (dict): Not used in this method but included for consistency
+    with other preprocessing methods.
+
+    Returns:
+    pd.DataFrame: The preprocessed DataFrame with the original 'rating' column replaced
+    by the integer representation of the rating.
+    """
+
     # 'rating' (string or null) (g, pg, pg_13, r, r+, rx)
     rating_map = {
         "g": 0,
@@ -211,6 +308,23 @@ def preprocess_rating(data: pd.DataFrame, config: dict) -> pd.DataFrame:
 
 
 class TextDataset(Dataset):
+    """
+    A custom Dataset class for handling text data.
+
+    This class is designed to work with a DataFrame that contains text data,
+    and a tokenizer for processing the text.
+    It also supports setting a maximum length for the processed text.
+
+    Attributes:
+    data (pd.DataFrame): The DataFrame containing the text data.
+    tokenizer: The tokenizer used to process the text.
+    max_length (int): The maximum length for the processed text.
+
+    Methods:
+    __len__(): Returns the number of items in the dataset.
+    __getitem__(idx): Returns the processed text at the given index.
+    """
+
     def __init__(self, dataframe, tokenizer, max_length=512):
         self.data = dataframe.copy()
         self.tokenizer = tokenizer
@@ -222,11 +336,30 @@ class TextDataset(Dataset):
     def __getitem__(self, idx):
         col = 'synopsis' if 'synopsis' in self.data.columns else 'related'
         text = self.data.iloc[idx][col]  # Adjust column name as necessary
-        inputs = self.tokenizer(text, padding='max_length', truncation=True, max_length=self.max_length, return_tensors="pt")
+        inputs = self.tokenizer(text, padding='max_length', truncation=True,
+                                max_length=self.max_length, return_tensors="pt")
         return idx, inputs['input_ids'].squeeze(0), inputs['attention_mask'].squeeze(0)
 
 
-def generate_embeddings(data: pd.DataFrame, model_path: str, device: str, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _generate_embeddings(data: pd.DataFrame, model_path: str, device: str, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Generates embeddings for the synopsis and related text in the given DataFrame.
+
+    This method uses a pretrained DistilBert model to generate embeddings for the synopsis and
+    related text in the given DataFrame.
+    The embeddings are then stored in new DataFrames, which are returned.
+
+    Args:
+    data (pd.DataFrame): The DataFrame containing the text data.
+    model_path (str): The path to the pretrained DistilBert model.
+    device (str): The device to use for the DistilBert model.
+    config (dict): A configuration dictionary containing the embedding dimension.
+
+    Returns:
+    tuple[pd.DataFrame, pd.DataFrame]: A tuple containing two DataFrames.
+    The first DataFrame contains the id and synopsis embeddings. The second DataFrame contains
+    the id and related embeddings.
+    """
 
     # Initialize tokenizer
     tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
@@ -292,26 +425,45 @@ def generate_embeddings(data: pd.DataFrame, model_path: str, device: str, config
     return synopsis_df_merge, related_df_merge
 
 
-def handle_studio_genres(data: pd.DataFrame) -> pd.DataFrame:
+def _create_embeddings(data: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Creates embeddings for the synopsis and related text in the given DataFrame.
 
-    f = lambda x: np.array(x).reshape(-1,)
-    data['genres'] = data['genres'].apply(f)
-    data['studios'] = data['studios'].apply(f)
+    This method is a wrapper for the _generate_embeddings method.
 
-    return data
+    Args:
+    data (pd.DataFrame): The DataFrame containing the text data.
+    config (dict): A configuration dictionary containing the model path.
 
-
-def create_embeddings(data: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    Returns:
+    tuple[pd.DataFrame, pd.DataFrame]: A tuple containing two DataFrames. The first DataFrame contains the synopsis embeddings. The second DataFrame contains the related embeddings.
+    """
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model_path = config['model_path']
-    synopsis_df, related_df = generate_embeddings(data, model_path, device, config)
+    synopsis_df, related_df = _generate_embeddings(data, model_path, device, config)
 
     data.drop(columns=['synopsis', 'related'], inplace=True)
     return synopsis_df, related_df
 
 
 def process(data: pd.DataFrame, config: dict) -> None:
+    """
+    This is the main method for preprocessing the given DataFrame.
+
+    This method performs a series of preprocessing steps on the given DataFrame,
+    including dropping unnecessary columns, handling missing values, and applying various
+    preprocessing functions to specific columns. It also creates embeddings for the synopsis and
+    related anime using a pretrained model.
+
+    Args:
+    data (pd.DataFrame): The DataFrame to be processed.
+    config (dict): A configuration dictionary specifying the preprocessing model paths and
+    embedding dimension.
+
+    Returns:
+    pd.DataFrame: The processed DataFrame.
+    """
 
     data = data.copy()
 
@@ -322,13 +474,13 @@ def process(data: pd.DataFrame, config: dict) -> None:
 
     # Handle features with special preprocessing methods
     func_map = {
-        'start_date end_date start_season.year': preprocess_dates,
-        'start_season.season': preprocess_season,
-        'synopsis title related_anime': preprocess_text,
-        'genres': preprocess_genres,
-        'studios': preprocess_studios,
-        'media_type': preprocess_media_type,
-        'rating': preprocess_rating
+        'start_date end_date start_season.year': _preprocess_dates,
+        'start_season.season': _preprocess_season,
+        'synopsis title related_anime': _preprocess_text,
+        'genres': _preprocess_genres,
+        'studios': _preprocess_studios,
+        'media_type': _preprocess_media_type,
+        'rating': _preprocess_rating
     }
 
     for col, func in func_map.items():
@@ -343,10 +495,10 @@ def process(data: pd.DataFrame, config: dict) -> None:
         if col not in data.columns:
             print(f"Column {col} not found in the dataset, skipping...")
             continue
-        model = load_model(path)
+        model = _load_model(path)
         data[col] = model.transform(data[col].values.reshape(-1, 1))
 
-    synopsis_df, related_df = create_embeddings(data, config)
+    synopsis_df, related_df = _create_embeddings(data, config)
 
     # Join all data
     data = data.merge(synopsis_df, on='id', how='left')
