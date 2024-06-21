@@ -4,7 +4,7 @@ import os
 import pandas as pd
 import requests
 from pymilvus import (AnnSearchRequest, Collection, WeightedRanker,
-                      connections, SearchResult)
+                      connections)
 
 from data_loading import data_loader
 from preprocessing import preprocess
@@ -56,9 +56,15 @@ class Recommender:
         return user_anime_list
 
     def _get_random_recommendations(self, limit: int) -> list[Recommendation]:
-        # TODO: change this method to return an array of Recommendation objects
+        # TODO: check and test this method
         # Get random recommendations
-        random_picks = self.anime_df.sample(n=limit)
+        random_sample = self.anime_df.sample(n=limit)
+        recommendations = []
+        for _, anime in random_sample.iterrows():
+            recommendations.append(Recommendation(anime_id=anime['id'],
+                                                  title=anime['title'],
+                                                  similarity=-1.0))
+        return recommendations
 
 
     def _get_new_anime_info(self, user_anime_list: pd.DataFrame) -> pd.DataFrame | None:
@@ -77,18 +83,13 @@ class Recommender:
         collector = data_loader.DataCollector(headers=headers,
                                               base_url=self.config['BASE_URL'],
                                               data_dir=self.config['DATA_DIR'],
+                                              request_delay=1.0
                                               )
-        new_info = collector.collect(anime_not_in_dataset)
+        new_info, new_anime_ids = collector.collect(anime_not_in_dataset, return_new_ids=True)
+        with open(os.path.join(self.config['DATA_DIR'], 'raw', 'new_anime_ids.txt'), 'a', encoding='utf-8') as f:
+            for anime_id in new_anime_ids:
+                f.write(f'{anime_id}\n')
         return new_info
-
-    def _make_recommendations(self, res: SearchResult) -> list[Recommendation]:
-        recommendations = []
-        for rec in res[0]:
-            anime = self.anime_df[self.anime_df['id'] == rec.pk]
-            recommendations.append(Recommendation(anime_id=rec.pk,
-                                                  title=anime['title'].values[0],
-                                                  similarity=rec.score))
-        return recommendations
 
     def _get_topk_recommendations(self, data: pd.DataFrame, limit: int) -> list[Recommendation]:
         # TODO: check and test this method
@@ -105,7 +106,7 @@ class Recommender:
             "anns_field": "synopsis_embedding",
             "param": {
                 "metric_type": "COSINE",
-                "params": {"nprobe": self.config['nprobe']}
+                "params": {"nprobe": self.config['nprobe']['text']}
             },
             "limit": limit
         }
@@ -158,10 +159,18 @@ class Recommender:
             rerank=rerank,
             limit=limit
         )
-        return self._make_recommendations(res)
+
+        # Transform SearchResult to list of Recommendations
+        recommendations = []
+        for rec in res[0]:
+            anime = self.anime_df[self.anime_df['id'] == rec.pk]
+            recommendations.append(Recommendation(anime_id=rec.pk,
+                                                  title=anime['title'].values[0],
+                                                  similarity=rec.score))
+        return recommendations
 
 
-    def recommend(self, user_name: str, limit: int):
+    def recommend(self, user_name: str, limit: int) -> list[Recommendation]:
         # TODO: implement this
 
         # 1. Get users anime list
