@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import pickle
-import re
 import signal
 import sys
 import time
@@ -16,7 +15,8 @@ from tqdm import tqdm
 
 class DataCollector:
 
-    def __init__(self, headers: dict, base_url: str, data_dir: str, request_delay: float = 4.15, max_iterations: int = 100, debug: bool = False):
+    def __init__(self, headers: dict, base_url: str, data_dir: str,
+                 request_delay: float = 4.15, max_iterations: int = 100, debug: bool = False):
         r"""Initializes the data collector.
 
         :param headers: Headers with Authorization
@@ -37,10 +37,10 @@ class DataCollector:
         self.download_queue = []
         self.anime_details = []
         self.session = requests.Session()
-        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGINT, self._signal_handler)
 
 
-    def signal_handler(self, sig, frame):
+    def _signal_handler(self, sig, frame):
         r"""Handles the SIGINT signal by saving the state and exiting.
 
         :param sig: Signal number
@@ -48,11 +48,11 @@ class DataCollector:
         """
 
         print("Caught SIGINT, saving state and exiting.")
-        self.save_state()
+        self._save_state()
         sys.exit(0)
 
 
-    def save_state(self):
+    def _save_state(self):
         r"""Saves the state of the data collection process.
             Saves the seen anime ids and the download queue to pickle files.
             Saves the anime details to a CSV file.
@@ -69,13 +69,13 @@ class DataCollector:
         with open(queue_path, 'wb') as f:
             pickle.dump(self.download_queue, f)
         
-        anime_df = self.create_dataframe()
+        anime_df = self._create_dataframe()
 
         output_path = os.path.join(self.data_dir, 'raw', 'anime_data.csv')
         anime_df.to_csv(output_path, mode='a', header=not os.path.exists(output_path), index=False)
 
 
-    def load_state(self):
+    def _load_state(self):
         r"""Loads the state of the data collection process.
         """
 
@@ -91,7 +91,7 @@ class DataCollector:
                 self.download_queue = pickle.load(f)
 
 
-    def fetch_top_anime(self, limit: int = 500):
+    def _fetch_top_anime(self, limit: int = 500):
         r"""Fetches the top anime from MyAnimeList and adds them to the download queue.
             This function is only used to start the data collection process.
 
@@ -111,7 +111,7 @@ class DataCollector:
             raise Exception("Failed to fetch top anime")
 
 
-    def fetch_anime_details(self, anime_id: int, max_retries: int = 5, base_delay: float = 1.0, timeout: float = 10.0) -> dict:
+    def _fetch_anime_details(self, anime_id: int, max_retries: int = 5, base_delay: float = 1.0, timeout: float = 10.0) -> dict:
         r"""Fetches the details of an anime from MyAnimeList.
         
         :param anime_id: Anime ID
@@ -182,13 +182,13 @@ class DataCollector:
                 backoff = base_delay * (2 ** attempt)
                 print(f"Retrying in {backoff} seconds.")
                 time.sleep(backoff)
-        
+
         # All retries failed
         print("Max retries exceeded.")
         return {}
-    
 
-    def get_related_anime_ids(self, anime: Dict[str, Any], include_recommended: bool = True) -> list:
+
+    def _get_related_anime_ids(self, anime: Dict[str, Any], include_recommended: bool = True) -> list:
         r"""Extracts the related anime ids from an anime json object.
 
         :param anime: Anime json object
@@ -211,7 +211,7 @@ class DataCollector:
             raise e
 
 
-    def create_dataframe(self) -> pd.DataFrame:
+    def _create_dataframe(self) -> pd.DataFrame:
         r"""Converts a list of anime details to a cleaned DataFrame.
 
         :return: Cleaned anime dataframe
@@ -242,9 +242,9 @@ class DataCollector:
             raise e
 
         return anime_df
-    
 
-    def add_ids_to_queue(self, anime_ids: list):
+
+    def _add_ids_to_queue(self, anime_ids: list):
         r"""Adds not seen anime ids to the download queue.
 
         :param anime_ids: List of anime ids
@@ -256,10 +256,10 @@ class DataCollector:
                 self.seen.add(id)
 
 
-    def collect_data(self):
+    def _collect_data(self):
         r"""Main data collection loop.
         """
-        
+
         pbar = tqdm(total=self.max_iterations, desc="Fetching anime details")
 
         iterations = 0
@@ -274,7 +274,7 @@ class DataCollector:
                 if self.debug:
                     print("Refreshing session.")
 
-            fetched_details = self.fetch_anime_details(anime_id=id)
+            fetched_details = self._fetch_anime_details(anime_id=id)
 
             # Request failed, recover the id and exit
             if not fetched_details:
@@ -289,15 +289,15 @@ class DataCollector:
 
             # Sleep to respect the rate limit (keep at >= 4.5 seconds to avoid rate limit errors)
             time.sleep(self.request_delay)
-            
+
             try:
-                related_anime_ids = self.get_related_anime_ids(fetched_details)
+                related_anime_ids = self._get_related_anime_ids(fetched_details)
             except KeyError as e:
                 self.download_queue.append(id)
                 print(f"KeyError: {str(e)}")
                 break
 
-            self.add_ids_to_queue(related_anime_ids)
+            self._add_ids_to_queue(related_anime_ids)
 
         pbar.close()
 
@@ -307,26 +307,44 @@ class DataCollector:
 
 
     def run(self):
-        r"""Runs the data collection process.
+        r"""Runs the full data collection process.
         """
 
-        self.load_state()
+        self._load_state()
 
         if not self.download_queue:
-            self.fetch_top_anime()
+            self._fetch_top_anime()
 
-        self.collect_data()
+        self._collect_data()
 
         self.session.close()
 
-        self.save_state()
+        self._save_state()
+
+    def collect(self, anime_ids: list):
+        r"""Collects the details of a list of anime ids.
+
+        :param anime_ids: List of anime ids
+        :return: List of anime details
+        :rtype: list
+        """
+
+        anime_details = []
+
+        for anime_id in anime_ids:
+            fetched_details = self._fetch_anime_details(anime_id=anime_id)
+            if fetched_details:
+                anime_details.append(fetched_details)
+            time.sleep(self.request_delay)
+
+        return anime_details
 
 
 if __name__ == "__main__":
     load_dotenv()
 
     # Define base URL for the MAL API
-    base_url = "https://api.myanimelist.net/v2"
+    BASE_URL = "https://api.myanimelist.net/v2"
 
     data_dir = os.getenv('DATA_DIR')
 
@@ -343,8 +361,8 @@ if __name__ == "__main__":
                             level=logging.INFO,
                             format='%(asctime)s - %(levelname)s - %(message)s')
 
-    collector = DataCollector(headers=headers, base_url=base_url,
+    collector = DataCollector(headers=headers, base_url=BASE_URL,
                               data_dir=data_dir, request_delay=4.15,
                               max_iterations=500, debug=False)
 
-    anime_df = collector.run()
+    collector.run()
