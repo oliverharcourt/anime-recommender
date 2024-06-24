@@ -21,7 +21,7 @@ from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 # ✅'synopsis,' # Anime synopsis (string or null)
 # ✅'mean,' # Mean score (float or null)
 # ✅'popularity,' # Popularity rank (integer or null)
-# 🛑'num_list_users,' # Number of users who have the anime in their list (integer)
+# ✅'num_list_users,' # Number of users who have the anime in their list (integer)
 # ✅'num_scoring_users,' # Number of users who have scored the anime (integer)
 # ✅'nsfw,' # NSFW classification (white=sfw, gray=partially, black=nsfw) (string or null)
 # ✅'genres,' # Genres (array of objects)
@@ -37,10 +37,11 @@ from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 # ✅'start_season,' # Start season (object or null)
 # ✅'start_date,' # Start date (string or null)
 # ✅'end_date,' # End date (string or null)
-# ✅'related_anime,' # Related anime (array of objects)
-# 🛑'related_manga,' # Related manga (array of objects)
-# 🛑'recommendations,' # Recommendations (array of objects)
-# ✅'statistics' # Statistics (object or null)
+# 🚫(no longer supported)'related_anime,' # Related anime (array of objects)
+# 🚫(no longer supported)'related_manga,' # Related manga (array of objects)
+# 🚫(no longer supported)'recommendations,' # Recommendations (array of objects)
+# 🚫(no longer supported)'statistics' # Statistics (object or null)
+
 
 def _load_model(path: str) -> object:
     """
@@ -103,11 +104,16 @@ def _preprocess_dates(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     data['start_date'] = data['start_date'].apply(safe_date_convert)
     data['end_date'] = data['end_date'].apply(safe_date_convert)
     # Calculate time difference
-    data['time_diff'] = data.apply(lambda x: time_diff(x['start_date'], x['end_date']), axis=1)
+    data['time_diff'] = data.apply(
+        lambda x: time_diff(
+            x['start_date'],
+            x['end_date']),
+        axis=1)
     data = data.drop(columns=['start_date', 'end_date'])
     # Scale time_diff
     td_scaler = _load_model(td_scaler_path)
-    data['time_diff'] = td_scaler.transform(data['time_diff'].values.reshape(-1, 1))
+    data['time_diff'] = td_scaler.transform(
+        data['time_diff'].values.reshape(-1, 1))
     # Scale start_season.year
     year_scaler = _load_model(year_scaler_path)
     data['start_season.year'] = year_scaler.transform(data['start_season.year']
@@ -130,15 +136,18 @@ def _preprocess_season(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     """
 
     def cyclical_encode(data, col, max_val):
-        data[col + '_sin'] = np.sin(2 * np.pi * data[col]/max_val)
-        data[col + '_cos'] = np.cos(2 * np.pi * data[col]/max_val)
+        data[col + '_sin'] = np.sin(2 * np.pi * data[col] / max_val)
+        data[col + '_cos'] = np.cos(2 * np.pi * data[col] / max_val)
         return data
 
     season_encoder = _load_model(config['start_season_season'])
-    data['start_season.season'] = season_encoder.transform(data['start_season.season'])
+    data['start_season.season'] = season_encoder.transform(
+        data['start_season.season'])
 
     # Apply the cyclical_encode function to create sine and cosine features
-    data = cyclical_encode(data, 'start_season.season', max_val=len(season_encoder.classes_))
+    data = cyclical_encode(
+        data, 'start_season.season', max_val=len(
+            season_encoder.classes_))
     data = data.drop(columns=['start_season.season'])
     return data
 
@@ -165,24 +174,31 @@ def _preprocess_text(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     def clean_text(text):
         text = unicodedata.normalize('NFKC', text)  # Unicode normalization
         text = text.replace('\u2013', '\u002d')  # Replace en dash with hyphen
-        text = text.replace('\u00d7', '\u0078')  # Replace multiplication sign with x
-        text = tprep.normalize.hyphenated_words(text)  # Normalize hyphenated words
-        text = tprep.normalize.quotation_marks(text)  # Normalize quotation marks
+        # Replace multiplication sign with x
+        text = text.replace('\u00d7', '\u0078')
+        text = tprep.normalize.hyphenated_words(
+            text)  # Normalize hyphenated words
+        text = tprep.normalize.quotation_marks(
+            text)  # Normalize quotation marks
         text = tprep.normalize.bullet_points(text)  # Normalize bullet points
         text = tprep.normalize.whitespace(text)  # Normalize whitespace
         text = tprep.remove.accents(text)  # Remove accents
         text = re.sub(r'<.*?>', '', text)  # Remove HTML tags if any
-        text = re.sub(r"\([\s+]?source.*?\)+", "", text, flags=re.IGNORECASE)  # Remove source citations
+        text = re.sub(r"\([\s+]?source.*?\)+", "", text,
+                      flags=re.IGNORECASE)  # Remove source citations
         text = re.sub(r"\[Writ.*?by.*?\]", "", text)  # Remove MAL citations
         text = re.sub(r"\s+", " ", text)  # Normalize whitespace
         text = text.strip()  # Strip whitespace from the beginning and the end
         return text
 
     def preprocess_related(data):
-        f = lambda x: [entry['node']['title'] for entry in ast.literal_eval(x)]
-        cr = lambda x: [clean_text(i) for i in f(x)]
-        g = lambda x: [clean_text(x)]
-        data['related'] = data['title'].apply(g) + data['related_anime'].apply(cr)
+        def f(x): return [entry['node']['title']
+                          for entry in ast.literal_eval(x)]
+
+        def cr(x): return [clean_text(i) for i in f(x)]
+        def g(x): return [clean_text(x)]
+        data['related'] = data['title'].apply(
+            g) + data['related_anime'].apply(cr)
         data['related'] = data['related'].apply(sorted)
         data = data.drop(columns=['title', 'related_anime'])
         return data
@@ -271,7 +287,7 @@ def _preprocess_media_type(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     # This covers all cases, but the duration and num_ep thresholds seem suboptimal
     # after some testing, thus we skip this for now
 
-    f = lambda x: 'special' if x in {'ona', 'ova', 'tv_special'} else x
+    def f(x): return 'special' if x in {'ona', 'ova', 'tv_special'} else x
     data['media_type'] = data['media_type'].apply(f)
     media_type_encoder = _load_model(config['media_type'])
     data['media_type'] = media_type_encoder.transform(data['media_type'])
@@ -338,10 +354,12 @@ class TextDataset(Dataset):
         text = self.data.iloc[idx][col]  # Adjust column name as necessary
         inputs = self.tokenizer(text, padding='max_length', truncation=True,
                                 max_length=self.max_length, return_tensors="pt")
-        return idx, inputs['input_ids'].squeeze(0), inputs['attention_mask'].squeeze(0)
+        return idx, inputs['input_ids'].squeeze(
+            0), inputs['attention_mask'].squeeze(0)
 
 
-def _generate_embeddings(data: pd.DataFrame, model_path: str, device: str, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _generate_embeddings(data: pd.DataFrame, model_path: str,
+                         device: str, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Generates embeddings for the synopsis and related text in the given DataFrame.
 
@@ -373,8 +391,16 @@ def _generate_embeddings(data: pd.DataFrame, model_path: str, device: str, confi
     related_dataset = TextDataset(related_df, tokenizer)
 
     # Create DataLoaders
-    loader_synopsis = DataLoader(synopsis_dataset, batch_size=32, shuffle=False, num_workers=2)
-    loader_related = DataLoader(related_dataset, batch_size=32, shuffle=False, num_workers=2)
+    loader_synopsis = DataLoader(
+        synopsis_dataset,
+        batch_size=32,
+        shuffle=False,
+        num_workers=2)
+    loader_related = DataLoader(
+        related_dataset,
+        batch_size=32,
+        shuffle=False,
+        num_workers=2)
     # make this a dict for access to specific loaders from calling code
     loaders = [loader_synopsis, loader_related]
 
@@ -392,7 +418,8 @@ def _generate_embeddings(data: pd.DataFrame, model_path: str, device: str, confi
         elif loader == loader_related:
             return 'related_emb'
 
-    model = DistilBertForMaskedLM.from_pretrained(model_path, device_map=device).base_model
+    model = DistilBertForMaskedLM.from_pretrained(
+        model_path, device_map=device).base_model
 
     # Generate embeddings
     for loader in loaders:
@@ -401,31 +428,41 @@ def _generate_embeddings(data: pd.DataFrame, model_path: str, device: str, confi
         for indices, input_ids, attention_masks in loader:
             if indices[0] % 1024 == 0:
                 print(indices[0])
-            input_ids, attention_masks = input_ids.to(device), attention_masks.to(device)
+            input_ids, attention_masks = input_ids.to(
+                device), attention_masks.to(device)
             with torch.no_grad():
                 # Extract the CLS token embeddings from the last hidden state
-                embeddings = model(input_ids=input_ids, attention_mask=attention_masks).last_hidden_state[:, 0, :].detach().cpu()
+                embeddings = model(input_ids=input_ids,
+                                   attention_mask=attention_masks).last_hidden_state[:,
+                                                                                     0,
+                                                                                     :].detach().cpu()
                 embedding_tensors[tensor_key][indices.cpu()] = embeddings
 
     # Dataframes of embeddings
-    synopsis_tensor = embedding_tensors['synopsis_emb'].clone().detach().numpy()
+    synopsis_tensor = embedding_tensors['synopsis_emb'].clone(
+    ).detach().numpy()
     related_tensor = embedding_tensors['related_emb'].clone().detach().numpy()
 
-    synopsis_vectors = [synopsis_tensor[i].tolist() for i in range(synopsis_tensor.shape[0])]
-    related_vectors = [related_tensor[i].tolist() for i in range(related_tensor.shape[0])]
+    synopsis_vectors = [synopsis_tensor[i].tolist()
+                        for i in range(synopsis_tensor.shape[0])]
+    related_vectors = [related_tensor[i].tolist()
+                       for i in range(related_tensor.shape[0])]
 
     # We only need the id column from the original dataframes
     synopsis_df.drop(columns=['synopsis'], inplace=True)
     related_df.drop(columns=['related'], inplace=True)
 
     # Merge the embeddings with the id column
-    synopsis_df_merge = pd.DataFrame({'id': synopsis_df['id'], 'synopsis_embedding': synopsis_vectors})
-    related_df_merge = pd.DataFrame({'id': related_df['id'], 'related_embedding': related_vectors})
+    synopsis_df_merge = pd.DataFrame(
+        {'id': synopsis_df['id'], 'synopsis_embedding': synopsis_vectors})
+    related_df_merge = pd.DataFrame(
+        {'id': related_df['id'], 'related_embedding': related_vectors})
 
     return synopsis_df_merge, related_df_merge
 
 
-def _create_embeddings(data: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _create_embeddings(
+        data: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Creates embeddings for the synopsis and related text in the given DataFrame.
 
@@ -441,7 +478,8 @@ def _create_embeddings(data: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, 
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model_path = config['model_path']
-    synopsis_df, related_df = _generate_embeddings(data, model_path, device, config)
+    synopsis_df, related_df = _generate_embeddings(
+        data, model_path, device, config)
 
     data.drop(columns=['synopsis', 'related'], inplace=True)
     return synopsis_df, related_df
