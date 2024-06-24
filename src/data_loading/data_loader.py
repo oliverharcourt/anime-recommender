@@ -71,7 +71,7 @@ class DataCollector:
         self.seen = set()
         self.download_queue = []
         self.anime_details = []
-        self.session = requests.Session()
+        # self.session = requests.Session()
         signal.signal(signal.SIGINT, self._signal_handler)
 
     def _signal_handler(self, sig, frame):
@@ -144,7 +144,8 @@ class DataCollector:
                 f"Failed to fetch top anime: {response.status_code if response else None}")
             raise Exception("Failed to fetch top anime")
 
-    def _fetch_anime_details(self, anime_id: int, max_retries: int = 5, base_delay: float = 1.0, timeout: float = 10.0) -> dict:
+    def _fetch_anime_details(self, anime_id: int, max_retries: int = 5,
+                             base_delay: float = 1.0, timeout: float = 10.0) -> dict:
         r"""Fetches the details of an anime from MyAnimeList.
 
         :param anime_id: Anime ID
@@ -168,11 +169,13 @@ class DataCollector:
                        'popularity,'
                        # Popularity rank (integer or null)
                        'num_list_users,'
-                       # Number of users who have the anime in their list (integer)
+                       # Number of users who have the anime in their list
+                       # (integer)
                        'num_scoring_users,'
                        # Number of users who have scored the anime (integer)
                        'nsfw,'
-                       # NSFW classification (white=sfw, gray=partially, black=nsfw) (string or null)
+                       # NSFW classification (white=sfw, gray=partially,
+                       # black=nsfw) (string or null)
                        'genres,'
                        # Genres (array of objects)
                        'studios,'
@@ -206,7 +209,7 @@ class DataCollector:
                        'recommendations,'
                        # Recommendations (array of objects)
                        'statistics')
-                       # Statistics (object or null)
+            # Statistics (object or null)
         }
 
         url = f"{self.base_url}/anime/{anime_id}"
@@ -221,7 +224,8 @@ class DataCollector:
                     # logging.info(f"Request successful for anime id: {anime_id}\nHeaders: {response.headers}")
                     return response.json()
                 else:
-                    # Received a response other than 200 OK, handle: log, wait, and possibly retry
+                    # Received a response other than 200 OK, handle: log, wait,
+                    # and possibly retry
                     print(
                         f"Request failed with status code: {response.status_code}")
                     logging.warning(
@@ -237,7 +241,8 @@ class DataCollector:
                 print(f"Retrying in {backoff} seconds.")
                 time.sleep(backoff)
             except requests.RequestException as e:
-                # General requests exception (includes ConnectionError, HTTPError, etc.)
+                # General requests exception (includes ConnectionError,
+                # HTTPError, etc.)
                 print(f"Request failed: {str(e)}")
                 logging.error(f"Request failed: {str(e)}")
                 backoff = base_delay * (2 ** attempt)
@@ -248,7 +253,8 @@ class DataCollector:
         print("Max retries exceeded.")
         return {}
 
-    def _get_related_anime_ids(self, anime: Dict[str, Any], include_recommended: bool = True) -> list[int]:
+    def _get_related_anime_ids(
+            self, anime: Dict[str, Any], include_recommended: bool = True) -> list[int]:
         r"""Extracts the related anime ids from an anime json object.
 
         :param anime: Anime json object
@@ -284,12 +290,14 @@ class DataCollector:
     def _collect_data(self):
         r"""Main data collection loop.
         """
-
+        # TODO Refactor this method to use the paging and offset features of the API
+        # --> this enables directly fetching all anime in the MAL database from the top anime list
         pbar = tqdm(total=self.max_iterations, desc="Fetching anime details")
 
         iterations = 0
 
-        # While there are anime to fetch and the iteration limit has not been reached
+        # While there are anime to fetch and the iteration limit has not been
+        # reached
         while self.download_queue and iterations < self.max_iterations:
             id = self.download_queue.pop(0)
 
@@ -312,7 +320,8 @@ class DataCollector:
             iterations += 1
             pbar.update(1)
 
-            # Sleep to respect the rate limit (keep at >= 4.5 seconds to avoid rate limit errors)
+            # Sleep to respect the rate limit (keep at >= 4.5 seconds to avoid
+            # rate limit errors)
             time.sleep(self.request_delay)
 
             try:
@@ -348,7 +357,8 @@ class DataCollector:
 
         self._save_state()
 
-    def collect(self, anime_ids: list, return_new_ids: bool = False) -> list[dict] | tuple[list[dict], list[int]]:
+    def collect(self, anime_ids: list,
+                return_new_ids: bool = False) -> list[dict] | tuple[list[dict], list[int]]:
         r"""Collects the details of a list of anime ids.
 
         :param anime_ids: List of anime ids
@@ -373,10 +383,209 @@ class DataCollector:
 
         self.session.close()
 
-        if not return_new_ids:
-            return anime_details
+        if return_new_ids:
+            return anime_details, list(new_ids)
 
-        return anime_details, list(new_ids)
+        return anime_details
+
+    def collect_anime_data(self) -> pd.DataFrame:
+        # 1. While there are more anime to fetch from top anime, fetch them
+        # 2. Clean the data
+        # 3. Save the data
+
+        # NOTE This method cannot retrieve the related_anime, related_manga,
+        # recommendations, and statistics fields
+
+        expected_columns = ['id', 'title', 'synopsis', 'mean', 'popularity', 'num_list_users',
+                            'num_scoring_users', 'nsfw', 'genres', 'studios', 'num_episodes',
+                            'average_episode_duration', 'status', 'rating', 'source', 'media_type',
+                            'created_at', 'updated_at', 'start_date', 'end_date', 'main_picture.medium',
+                            'main_picture.large', 'start_season.year', 'start_season.season']
+
+        anime_details_df = pd.DataFrame(columns=expected_columns)
+
+        field_params = {
+            'fields': ('id,'
+                       # Anime ID (integer)
+                       'title,'
+                       # Anime title (string)
+                       'synopsis,'
+                       # Anime synopsis (string or null)
+                       'mean,'
+                       # Mean score (float or null)
+                       'popularity,'
+                       # Popularity rank (integer or null)
+                       'num_list_users,'
+                       # Number of users who have the anime in their list
+                       # (integer)
+                       'num_scoring_users,'
+                       # Number of users who have scored the anime (integer)
+                       'nsfw,'
+                       # NSFW classification (white=sfw, gray=partially,
+                       # black=nsfw) (string or null)
+                       'genres,'
+                       # Genres (array of objects)
+                       'studios,'
+                       # Studios (array of objects)
+                       'num_episodes,'
+                       # Number of episodes (integer)
+                       'average_episode_duration,'
+                       # Average duration of an episode (integer or null)
+                       'status,'
+                       # Airing status (string)
+                       'rating,'
+                       # Age rating (string or null) (g, pg, pg_13, r, r+, rx)
+                       'source,'
+                       # Source (string or null)
+                       'media_type,'
+                       # Media type (string)
+                       'created_at,'
+                       # Date of creation (string <date-time>)
+                       'updated_at,'
+                       # Date of last update (string <date-time>)
+                       'start_season,'
+                       # Start season (object or null)
+                       'start_date,'
+                       # Start date (string or null)
+                       'end_date,'
+                       # End date (string or null)
+                       'related_anime,'
+                       # Related anime (array of objects)
+                       'related_manga,'
+                       # Related manga (array of objects)
+                       'recommendations,'
+                       # Recommendations (array of objects)
+                       'statistics')
+            # Statistics (object or null)
+        }
+
+        offset = 0
+
+        print("Starting data collection...")
+        while True:
+            other_params = {
+                'limit': 500,
+                'ranking_type': 'all',
+                'offset': offset
+            }
+
+            combined_params = field_params | other_params
+
+            try:
+                response = requests.get(
+                    f"{self.base_url}/anime/ranking",
+                    headers=self.headers,
+                    params=combined_params,
+                    timeout=10.0
+                )
+            except requests.Timeout:
+                print(f"Request timed out at offset: {offset}")
+            except requests.RequestException as e:
+                print(f"Request failed: {str(e)}")
+                break
+
+            if response.status_code != 200:
+                logging.error(
+                    f"Failed to fetch top anime: {response.status_code}")
+                break
+
+            response = response.json()
+            if not response['data']:
+                break
+
+            for anime in response['data']:
+                new_row = pd.json_normalize(anime['node'])
+                anime_details_df = pd.concat(
+                    [anime_details_df, new_row], ignore_index=True)
+
+            if not response['paging']:
+                break
+
+            offset += 500
+            print(f"Offset: {offset}")
+            time.sleep(self.request_delay)
+
+        anime_details_df['synopsis'] = anime_details_df['synopsis'].apply(
+            lambda x: x.replace("\n", " ") if pd.notnull(x) else x)
+
+        return anime_details_df
+
+    def run_collection(self, media_type: str, config: dict) -> None:
+
+        data: pd.DataFrame = self.collect_anime_data(
+        ) if media_type == 'anime' else self.collect_manga_data()
+
+        output_path = config['output_path']
+
+        data.to_json(
+            os.path.join(
+                output_path,
+                "raw",
+                f"mal_{media_type}_data.json"),
+            orient='records')
+
+    def collect_manga_data(self, offset: int = 0) -> pd.DataFrame:
+
+        manga_details_df = pd.DataFrame(columns=['id', 'title', 'synopsis'])
+
+        field_params = {
+            'fields': ('id,'
+                       # Manga ID (integer)
+                       'title,'
+                       # Manga title (string)
+                       'synopsis')
+            # Manga synopsis (string or null)
+        }
+
+        print("Starting data collection...")
+        while True:
+            other_params = {
+                'limit': 500,
+                'ranking_type': 'all',
+                'offset': offset
+            }
+
+            combined_params = field_params | other_params
+
+            try:
+                response = requests.get(
+                    f"{self.base_url}/manga/ranking",
+                    headers=self.headers,
+                    params=combined_params,
+                    timeout=10.0
+                )
+            except requests.Timeout:
+                print(f"Request timed out at offset: {offset}")
+            except requests.RequestException as e:
+                print(f"Request failed: {str(e)}")
+                break
+
+            if response.status_code != 200:
+                logging.error(
+                    f"Failed to fetch top manga: {response.status_code}")
+                break
+
+            response = response.json()
+            if not response['data']:
+                break
+
+            for manga in response['data']:
+                new_row = pd.json_normalize(manga['node'])
+                manga_details_df = pd.concat(
+                    [manga_details_df, new_row], ignore_index=True)
+
+            if not response['paging']:
+                break
+
+            offset += 500
+            if offset % 1000 == 0:
+                print(f"Offset: {offset}")
+            time.sleep(self.request_delay)
+
+        manga_details_df['synopsis'] = manga_details_df['synopsis'].apply(
+            lambda x: x.replace("\n", " ") if pd.notnull(x) else x)
+
+        return manga_details_df
 
 
 if __name__ == "__main__":
