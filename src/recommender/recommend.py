@@ -1,13 +1,10 @@
 import dataclasses
-import os
+import itertools
 
 import pandas as pd
 import requests
-from pymilvus import (AnnSearchRequest, Collection, WeightedRanker,
-                      connections)
+from pymilvus import AnnSearchRequest, SearchResult, WeightedRanker
 
-from data_loading import data_loader
-from preprocessing import preprocess
 
 @dataclasses.dataclass
 class Recommendation:
@@ -22,38 +19,73 @@ class Recommendation:
     anime_id: int
     title: str
     similarity: float
+    link: str
+
 
 class Recommender:
 
-    def __init__(self, config, model):
+    def __init__(self, config, model, collection, dataset):
         self.config = config
         self.model = model
-        self.anime_df = self._load_dataset()
-        self.anime_collection = self._load_collection()
+        self.anime_collection = collection
+        self.anime_df = dataset
         self.BASE_URL = config['BASE_URL']
+        self.request_headers = {
+            'Authorization': f"Bearer {config['MAL_ACCESS_TOKEN']}"}
 
-    def _load_dataset(self) -> pd.DataFrame:
-        # Load dataset
-        return pd.read_csv(os.path.join(self.config['DATA_DIR'], 'raw', 'anime_data.csv'))
-
-    def _load_collection(self) -> Collection:
-        # Load vector database
-        connections.connect("default", host=self.config['VECTOR_DB']['HOST'],
-                                         port=self.config['VECTOR_DB']['PORT'])
-        collection = Collection(name=self.config['VECTOR_DB']['COLLECTION_NAME'])
-        collection.load()
-        return collection
-
-    def _get_user_anime_list(self, user_name: str) -> list[dict]:
-        # TODO: implement this
+    def _get_user_anime_list(self, user_name: str,
+                             limit: int = 1000) -> pd.DataFrame:
         # Get users anime list through MAL api
-        user_anime_list = []
-        try:
-            # request user anime list from MAL api
-            user_anime_list = requests.get(f'{self.BASE_URL}/user/{user_name}/animelist', timeout=10).json()
-        except Exception as e:
-            print(e)
-        return user_anime_list
+        user_anime_df = pd.DataFrame({'id': [], 'title': [], 'score': [], 'status': [
+        ], 'episodes_watched': [], 'rewatching': []}).astype(
+            {'id': 'int32', 'title': 'string', 'score': 'int32', 'status': 'string', 'episodes_watched': 'int32', 'rewatching': 'bool'})
+        print(f"Created empty user anime list dataframe: {user_anime_df}")
+
+        #  Set initial offset
+        offset = 0
+
+        # While there are more animes to fetch
+        while True:
+            try:
+                # request user anime list from MAL api
+                print(
+                    f"Requesting user anime list from MAL api for user: {user_name}")
+
+                params = {
+                    'fields': 'list_status',
+                    'limit': limit,
+                    'offset': offset,
+                    # 'status': 'completed',
+                }
+                user_anime_list = requests.get(
+                    url=f"{self.BASE_URL}/users/{user_name}/animelist",
+                    headers=self.request_headers,
+                    params=params,
+                    timeout=10
+                ).json()
+
+                print(
+                    f"Received user anime list from MAL api: {user_anime_list}")
+
+            except Exception as e:
+                print(e)
+
+            if not user_anime_list['paging']:
+                break
+
+            offset += limit
+
+        print("Adding user anime list to dataframe...")
+        for entry in user_anime_list['data']:
+            merged = entry['node'] | entry['list_status']
+            new_row = {'id': int(merged['id']), 'title': merged['title'],
+                       'score': int(merged['score']), 'status': merged['status'],
+                       'episodes_watched': int(merged['num_episodes_watched']),
+                       'rewatching': merged['is_rewatching']}
+            user_anime_df = pd.concat(
+                [user_anime_df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
+
+        return user_anime_df
 
     def _get_random_recommendations(self, limit: int) -> list[Recommendation]:
         # TODO: check and test this method
@@ -63,56 +95,28 @@ class Recommender:
         for _, anime in random_sample.iterrows():
             recommendations.append(Recommendation(anime_id=anime['id'],
                                                   title=anime['title'],
-                                                  similarity=-1.0))
+                                                  similarity=-1.0,
+                                                  link=f"https://myanimelist.net/anime/{anime['id']}"))
         return recommendations
 
-
-    def _get_new_anime_info(self, user_anime_list: pd.DataFrame) -> pd.DataFrame | None:
-        # TODO: implement this
-        # 1. Get anime info from MAL api --> use data_loader.py to get anime info
-        # 3. add new anime info to dataset
-        # 4. prepeocess new anime info (this also adds their embeddings to the vector database)
-
-        # If user has anime in their list, that are not in the dataset, get info on those anime from MAL api
-        anime_ids = [anime['id'] for anime in user_anime_list]
-        anime_not_in_dataset = anime_ids[~anime_ids.isin(self.anime_df['id'])]
-        if len(anime_not_in_dataset) <= 0:
-            return None
-        # Get info on anime from MAL api
-        headers = {}
-        collector = data_loader.DataCollector(headers=headers,
-                                              base_url=self.config['BASE_URL'],
-                                              data_dir=self.config['DATA_DIR'],
-                                              request_delay=1.0
-                                              )
-        new_info, new_anime_ids = collector.collect(anime_not_in_dataset, return_new_ids=True)
-        with open(os.path.join(self.config['DATA_DIR'], 'raw', 'new_anime_ids.txt'), 'a', encoding='utf-8') as f:
-            for anime_id in new_anime_ids:
-                f.write(f'{anime_id}\n')
-        return new_info
-
-    def _get_topk_recommendations(self, data: pd.DataFrame, limit: int) -> list[Recommendation]:
-        # TODO: check and test this method
-
-        # Get search vectors
-        hybrid_query_synopsis = data['synopsis_embedding'].tolist()
-        hybrid_query_related = data['related_embedding'].tolist()
-        hybrid_query_genres = data['genres'].tolist()
-        hybrid_query_studios = data['studios'].tolist()
+    def _do_hybrid_search(self, hybrid_query_vec: dict,
+                          limit: int) -> SearchResult:
 
         # Create search params
         search_params_synopsis = {
-            "data": hybrid_query_synopsis,
+            "data": hybrid_query_vec['synopsis_embedding'],
             "anns_field": "synopsis_embedding",
             "param": {
                 "metric_type": "COSINE",
                 "params": {"nprobe": self.config['nprobe']['text']}
             },
+            # Exclude the query anime from the search results
+            "expr": f"id not in {hybrid_query_vec['id']}",
             "limit": limit
         }
 
         search_params_related = {
-            "data": hybrid_query_related,
+            "data": hybrid_query_vec['related_embedding'],
             "anns_field": "related_embedding",
             "param": {
                 "metric_type": "COSINE",
@@ -122,7 +126,7 @@ class Recommender:
         }
 
         search_params_genres = {
-            "data": hybrid_query_genres,
+            "data": hybrid_query_vec['genres'],
             "anns_field": "genres",
             "param": {
                 "metric_type": "L2",
@@ -132,7 +136,7 @@ class Recommender:
         }
 
         search_params_studios = {
-            "data": hybrid_query_studios,
+            "data": hybrid_query_vec['studios'],
             "anns_field": "studios",
             "param": {
                 "metric_type": "L2",
@@ -142,14 +146,15 @@ class Recommender:
         }
 
         # Create request objects
-        req_synopsis = AnnSearchRequest(**search_params_synopsis)
-        req_related = AnnSearchRequest(**search_params_related)
-        req_genres = AnnSearchRequest(**search_params_genres)
-        req_studios = AnnSearchRequest(**search_params_studios)
-
-        reqs = [req_synopsis, req_related, req_genres, req_studios]
+        reqs = [
+            AnnSearchRequest(**search_params_synopsis),
+            AnnSearchRequest(**search_params_related),
+            AnnSearchRequest(**search_params_genres),
+            AnnSearchRequest(**search_params_studios)
+        ]
 
         # Define reranking strategy
+        #  order: synopsis, related, genres, studios
         # (0.2, 0.1, 0.6, 0.1) seemed to work well in one case
         rerank = WeightedRanker(0.2, 0.1, 0.6, 0.1)
 
@@ -160,50 +165,77 @@ class Recommender:
             limit=limit
         )
 
-        # Transform SearchResult to list of Recommendations
-        recommendations = []
-        for rec in res[0]:
-            anime = self.anime_df[self.anime_df['id'] == rec.pk]
-            recommendations.append(Recommendation(anime_id=rec.pk,
-                                                  title=anime['title'].values[0],
-                                                  similarity=rec.score))
-        return recommendations
+        return res
 
+    def _get_db_entries_by_id(self, ids: list) -> SearchResult:
+        # Get anime embeddings from vector database
+        res = self.anime_collection.query(
+            expr=f"id in {ids}",
+            output_fields=["*"]
+        )
+
+        return res
+
+    def _get_topk_recommendations(
+            self, anime_ids: list, limit: int) -> list[Recommendation]:
+        # TODO: check and test this method
+
+        data = self.anime_df[self.anime_df['id'].isin(anime_ids)]
+
+        present_animes = self._get_db_entries_by_id(
+            data['id'].drop_duplicates().tolist())
+
+        res = []
+
+        # Perform hybrid search
+        for anime in present_animes:
+            res.append(self._do_hybrid_search(anime, limit))
+
+        return res
+
+    def _scale_recommendations(
+            self, recommendations: list[list[dict]]) -> list[list[dict]]:
+        # TODO: implement this method
+        # This method will scale the similarity scores of the recommendations
+        # by the users score for the anime that produced those recommendations
+        # For animes where there is no user score available, default to some value
+        # This method must be called before _format_recommendations, since _format_recommendations
+        #  flattens the list of recommendations
+        pass
+
+    def _format_recommendations(
+            self, recommendations: list[SearchResult]) -> list[Recommendation]:
+        # TODO: implement this method
+        # Transform SearchResult to list of Recommendations
+        recommendations = list(itertools.chain(recommendations))
+        res = []
+        for rec in recommendations:
+            anime = self.anime_df[self.anime_df['id'] == rec.pk]
+            res.append(Recommendation(anime_id=rec.pk,
+                                      title=anime['title'].values[0],
+                                      similarity=rec.score,
+                                      link=f"https://myanimelist.net/anime/{rec.pk}"))
+        return res
 
     def recommend(self, user_name: str, limit: int) -> list[Recommendation]:
         # TODO: implement this
 
+        # New process (after updating data_loader.py with full anime download functionality):
         # 1. Get users anime list
         # 2. If user has no anime in their list, return random recommendations
-        # 3. If user has anime in their list, that are not in the dataset, get info on those anime from MAL api
-        # 4. preprocess new anime info
-        # 5. perform hybrid vector search with users anime embeddings
-        # 6. add new anime info to the vector database and dataset (after generating recommendations)
-        # 7. return recommendations
-        # 8. profit
+        # 3. Get anime ids from users list (they should all be in the dataset)
+        # 4. Get anime embeddings from vector database
+        # 5. Perform hybrid vector search
 
-        # Get users anime list
         user_anime_list = self._get_user_anime_list(user_name)
 
-        # If user has no anime in their list, return random recommendations
-        if len(user_anime_list['data']) == 0:
+        if len(user_anime_list) == 0:
             return self._get_random_recommendations(limit)
 
-        # If user has anime in their list, that are not in the dataset, get info on those anime from MAL api
-        new_anime_info = self._get_new_anime_info(user_anime_list)
+        anime_ids = user_anime_list['id'].tolist()
 
-        # Preprocess new anime info
-        new_anime_info_preprocessed = preprocess.process(new_anime_info, config=self.config['preprocessing'])
-
-        # Generate recommendations
-        recommendations = self._get_topk_recommendations(new_anime_info_preprocessed, limit)
-
-        # Add new anime info to the vector database
-        self.anime_collection.insert(new_anime_info_preprocessed)
-
-        # Add new anime info to the dataset
-        self.anime_df.append(new_anime_info, ignore_index=True)
-        self.anime_df.to_csv(os.path.join(self.config['DATA_DIR'], 'raw', 'anime_data.csv'), index=False)
+        recommendations = self._get_topk_recommendations(
+            anime_ids, limit)
 
         return recommendations
 
