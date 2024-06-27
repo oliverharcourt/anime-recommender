@@ -102,7 +102,7 @@ class Recommender:
 
         # Create search params
         search_params_synopsis = {
-            "data": hybrid_query_vec['synopsis_embedding'],
+            "data": [hybrid_query_vec['synopsis_embedding']],
             "anns_field": "synopsis_embedding",
             "param": {
                 "metric_type": "COSINE",
@@ -114,7 +114,7 @@ class Recommender:
         }
 
         search_params_related = {
-            "data": hybrid_query_vec['related_embedding'],
+            "data": [hybrid_query_vec['related_embedding']],
             "anns_field": "related_embedding",
             "param": {
                 "metric_type": "COSINE",
@@ -126,7 +126,7 @@ class Recommender:
         }
 
         search_params_genres = {
-            "data": hybrid_query_vec['genres'],
+            "data": [hybrid_query_vec['genres']],
             "anns_field": "genres",
             "param": {
                 "metric_type": "L2",
@@ -138,7 +138,7 @@ class Recommender:
         }
 
         search_params_studios = {
-            "data": hybrid_query_vec['studios'],
+            "data": [hybrid_query_vec['studios']],
             "anns_field": "studios",
             "param": {
                 "metric_type": "L2",
@@ -222,10 +222,10 @@ class Recommender:
 
             # wrap query vectors in outer list to match the format of the
             # hybrid search method
-            anime['synopsis_embedding'] = [anime['synopsis_embedding']]
-            anime['related_embedding'] = [anime['related_embedding']]
-            anime['genres'] = [anime['genres']]
-            anime['studios'] = [anime['studios']]
+            anime['synopsis_embedding'] = anime['synopsis_embedding']
+            anime['related_embedding'] = anime['related_embedding']
+            anime['genres'] = anime['genres']
+            anime['studios'] = anime['studios']
 
             query_res = self._do_hybrid_search(
                 anime, limit=limit, exclude_ids=exclude_ids)
@@ -279,14 +279,16 @@ class Recommender:
         return sorted(flattend_recommendations,
                       key=lambda x: x['scaled_distance'], reverse=True)
 
-    def recommend(self, user_name: str, limit: int) -> list[Recommendation]:
-        # New process (after updating data_loader.py with full anime download functionality):
-        # 1. Get users anime list
-        # 2. If user has no anime in their list, return random recommendations
-        # 3. Get anime ids from users list (they should all be in the dataset)
-        # 4. Get anime embeddings from vector database
-        # 5. Perform hybrid vector search
+    def recommend(self, user_name: str, limit: int) -> pd.DataFrame:
+        """Recommends anime to a user based on their anime list.
 
+        Args:
+            user_name (str): The name of the user to recommend anime to.
+            limit (int): The number of anime to recommend.
+
+        Returns:
+            pd.DataFrame: A dataframe containing the recommended anime.
+        """
         user_anime_list = self._get_user_anime_list(user_name)
 
         if len(user_anime_list) == 0:
@@ -308,3 +310,38 @@ class Recommender:
         # recommendations = self._format_recommendations(recommendations)
 
         return recommendations.head(limit)
+
+    def recommend_by_id(self, anime_id: int, limit: int) -> pd.DataFrame:
+        """Recommends anime similar to the given anime.
+
+        Args:
+            anime_id (int): The ID of the anime to recommend similar anime to.
+            limit (int): The number of anime to recommend.
+
+        Returns:
+            pd.DataFrame: A dataframe containing the recommended anime.
+        """
+
+        print(f"Recommendations for anime with id: {anime_id}")
+
+        # Get the animes embedding
+        vectors = self._get_db_entries_by_id([anime_id])
+        #  There should only be one anime with the given id
+        vector = vectors[0]
+
+        # Perform hybrid search
+        query_res = self._do_hybrid_search(
+            vector, limit=limit, exclude_ids=[anime_id])
+
+        res = []
+
+        for rec in query_res[0]:
+            res.append(
+                {
+                    'id': rec.pk,
+                    'distance': rec.score,
+                    'link': f"https://myanimelist.net/anime/{rec.pk}"
+                }
+            )
+
+        return pd.DataFrame(res)
