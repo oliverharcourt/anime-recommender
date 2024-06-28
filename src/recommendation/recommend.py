@@ -1,9 +1,9 @@
 import dataclasses
-import itertools
+import sys
 
 import pandas as pd
 import requests
-from pymilvus import AnnSearchRequest, SearchResult, WeightedRanker, Collection
+from pymilvus import AnnSearchRequest, Collection, SearchResult, WeightedRanker
 
 
 @dataclasses.dataclass
@@ -38,17 +38,17 @@ class Recommender:
         user_anime_df = pd.DataFrame({'id': [], 'title': [], 'score': [], 'status': [
         ], 'episodes_watched': [], 'rewatching': []}).astype(
             {'id': 'int32', 'title': 'string', 'score': 'int32', 'status': 'string', 'episodes_watched': 'int32', 'rewatching': 'bool'})
-        print(f"Created empty user anime list dataframe: {user_anime_df}")
+        # print(f"Created empty user anime list dataframe: {user_anime_df}")
 
+        # request user anime list from MAL api
+        print(
+            f"Fetching anime list for user: {user_name}")
         # Set initial offset
         offset = 0
 
         # While there are more animes to fetch
         while True:
             try:
-                # request user anime list from MAL api
-                print(
-                    f"Requesting user anime list from MAL api for user: {user_name}")
 
                 params = {
                     'fields': 'list_status',
@@ -61,20 +61,25 @@ class Recommender:
                     headers=self.request_headers,
                     params=params,
                     timeout=10
-                ).json()
-
-                # print(
-                # f"Received user anime list from MAL api: {user_anime_list}")
+                )
 
             except Exception as e:
                 print(e)
+
+            # print(f"response status: {user_anime_list.status_code}")
+            if user_anime_list.status_code != 200:
+                print(
+                    f"Failed to fetch anime list for user: {user_name}, status code: {user_anime_list.status_code}")
+                sys.exit(1)
+
+            user_anime_list = user_anime_list.json()
 
             if not user_anime_list['paging']:
                 break
 
             offset += limit
 
-        print("Adding user anime list to dataframe...")
+        # print("Adding user anime list to dataframe...")
         for entry in user_anime_list['data']:
             merged = entry['node'] | entry['list_status']
             new_row = {'id': int(merged['id']), 'title': merged['title'],
@@ -182,18 +187,29 @@ class Recommender:
 
     def _get_topk_recommendations(
             self, user_anime_list: pd.DataFrame, limit: int) -> dict[int, tuple[int, list]]:
-        print(f"Columns of user anime list: {user_anime_list.columns}")
+        # print(f"Columns of user anime list: {user_anime_list.columns}")
+        print("Getting topk recommendations...")
 
         # Filter out animes that are not in the dataset and drop duplicate
         # animes
         relevant_animes = user_anime_list.loc[user_anime_list['id'].isin(
-            self.anime_df['id']), ['id', 'score', 'status']].drop_duplicates(subset='id')
+            self.anime_df['id']), ['id', 'score', 'status']]
+
+        print(
+            f"Num anime in user list: {len(user_anime_list)}, Num relevant animes: {len(relevant_animes)}")
+        print(
+            f"Animes not in dataset: {user_anime_list[~user_anime_list['id'].isin(self.anime_df['id'])]}")
+
+        relevant_animes.drop_duplicates(subset='id', inplace=True)
+
+        print(
+            f"Num relevant animes after dropping duplicates: {len(relevant_animes)}")
 
         # Only consider animes that the user has completed
         relevant_animes = relevant_animes[relevant_animes['status']
                                           == 'completed']  # .head(3)
 
-        print(f"Relevant animes: {relevant_animes}")
+        # print(f"Relevant animes: {relevant_animes}")
 
         # ids of animes to fetch from the database to use as the query vectors
         # of the hybrid search
@@ -207,25 +223,20 @@ class Recommender:
 
         print(f"Number of ids to exclude: {len(exclude_ids)}")
 
-        print(f"exclude_ids: {sorted(exclude_ids)}")
+        # print(f"exclude_ids: {sorted(exclude_ids)}")
 
         # Get anime embeddings from vector database
         present_animes = self._get_db_entries_by_id(ids)
 
         res = {}
 
+        print("Performing similarity search...")
+
         # Perform hybrid search
         for anime in present_animes:
             anime_id = anime['id']
             anime_score = relevant_animes[relevant_animes['id']
                                           == anime_id]['score'].values[0]
-
-            # wrap query vectors in outer list to match the format of the
-            # hybrid search method
-            anime['synopsis_embedding'] = anime['synopsis_embedding']
-            anime['related_embedding'] = anime['related_embedding']
-            anime['genres'] = anime['genres']
-            anime['studios'] = anime['studios']
 
             query_res = self._do_hybrid_search(
                 anime, limit=limit, exclude_ids=exclude_ids)
@@ -279,7 +290,7 @@ class Recommender:
         return sorted(flattend_recommendations,
                       key=lambda x: x['scaled_distance'], reverse=True)
 
-    def recommend(self, user_name: str, limit: int) -> pd.DataFrame:
+    def recommend_by_username(self, user_name: str, limit: int) -> pd.DataFrame:
         """Recommends anime to a user based on their anime list.
 
         Args:
@@ -307,7 +318,7 @@ class Recommender:
         recommendations['link'] = recommendations.apply(
             lambda x: f"https://myanimelist.net/anime/{int(x['id'])}", axis=1)
 
-        # recommendations = self._format_recommendations(recommendations)
+        recommendations.reset_index(inplace=True, drop=True)
 
         return recommendations.head(limit)
 
