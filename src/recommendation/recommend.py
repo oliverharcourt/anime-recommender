@@ -91,16 +91,13 @@ class Recommender:
 
         return user_anime_df
 
-    def _get_random_recommendations(self, limit: int) -> list[Recommendation]:
+    def _get_random_recommendations(self, limit: int) -> pd.DataFrame:
         # Get random recommendations
-        random_sample = self.anime_df.sample(n=limit)
-        recommendations = []
-        for _, anime in random_sample.iterrows():
-            recommendations.append(Recommendation(anime_id=anime['id'],
-                                                  title=anime['title'],
-                                                  similarity=-1.0,
-                                                  link=f"https://myanimelist.net/anime/{anime['id']}"))
-        return recommendations
+        random_sample = self.anime_df.sample(n=limit)[['id', 'title']]
+
+        random_sample['link'] = random_sample.apply(
+            lambda x: f"https://myanimelist.net/anime/{int(x['id'])}", axis=1)
+        return random_sample
 
     def _do_hybrid_search(self, hybrid_query_vec: dict,
                           limit: int, exclude_ids: list) -> SearchResult:
