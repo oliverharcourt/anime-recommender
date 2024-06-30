@@ -47,3 +47,31 @@ Recommendations for anime with id: 21
 8  41467       0.6  https://myanimelist.net/anime/41467
 9  53998       0.6  https://myanimelist.net/anime/53998
 ```
+```shell
+$ python main.py -a "Death" -l 15
+
+The following animes were found:
+1. Death Note
+2. Death Parade
+3. Death Billiards
+4. Death Note: Rewrite
+5. Dead Mount Death Play Part 2
+Select the anime you are looking for, or n to abort search (1/2/.../n): 1
+Recommendations for anime with id: 1535
+       id  distance                                 link
+0    2994  0.600000   https://myanimelist.net/anime/2994
+1   16762  0.600000  https://myanimelist.net/anime/16762
+2   41619  0.300000  https://myanimelist.net/anime/41619
+3   35120  0.196532  https://myanimelist.net/anime/35120
+4     355  0.196397    https://myanimelist.net/anime/355
+5    8247  0.196235   https://myanimelist.net/anime/8247
+6   36144  0.196112  https://myanimelist.net/anime/36144
+7   21843  0.196070  https://myanimelist.net/anime/21843
+8   51417  0.196068  https://myanimelist.net/anime/51417
+9    2053  0.196052   https://myanimelist.net/anime/2053
+10   2772  0.196012   https://myanimelist.net/anime/2772
+11  51367  0.195960  https://myanimelist.net/anime/51367
+12  54595  0.195960  https://myanimelist.net/anime/54595
+13    905  0.195926    https://myanimelist.net/anime/905
+14   2246  0.195890   https://myanimelist.net/anime/2246
+```
