@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=70.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anime_recommender"
+version = "0.0.1"
+dependencies = [
+    "pandas",
+    "pymilvus",
+    "thefuzz"
+]
+requires-python = ">=3.10"
+authors = [{name = "Oliver Harcourt", email = "oliver.harcourt@proton.me"}]
+description = "A simple anime recommendation system."
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Unix"
+]
+
+[project.urls]
+Repository = "https://github.com/oliverharcourt/anime-recommender"
+
+[project.scripts]
+animerec = "anime_recommender.main:main"
