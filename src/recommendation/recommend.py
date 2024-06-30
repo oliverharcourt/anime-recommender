@@ -1,25 +1,8 @@
-import dataclasses
 import sys
 
 import pandas as pd
 import requests
 from pymilvus import AnnSearchRequest, Collection, SearchResult, WeightedRanker
-
-
-@dataclasses.dataclass
-class Recommendation:
-    """
-    A simple wrapper class for a recommendation.
-
-    Attributes:
-        anime_id (int): The ID of the anime.
-        title (str): The title of the anime.
-        similarity (float): The similarity score of the recommendation.
-    """
-    anime_id: int
-    title: str
-    similarity: float
-    link: str
 
 
 class Recommender:
