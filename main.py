@@ -238,6 +238,11 @@ def _find_anime(title_query: str, dataset: pd.DataFrame) -> int | None:
 
 
 def main(args):
+    """Main function for the anime recommendation system.
+
+    Args:
+        args (argparse.Namespace): The command line arguments.
+    """
 
     config = _load_config(config_path="config.json")
 
