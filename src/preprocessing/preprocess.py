@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import textacy.preprocessing as tprep
 import torch
+from sklearn.feature_extraction import FeatureHasher
+from sklearn.preprocessing import MultiLabelBinarizer
 from torch.utils.data import DataLoader, Dataset
 from transformers import DistilBertForMaskedLM, DistilBertTokenizer
 
@@ -485,7 +487,7 @@ def _create_embeddings(
     return synopsis_df, related_df
 
 
-def process(data: pd.DataFrame, config: dict) -> None:
+def process(data: pd.DataFrame, config: dict) -> pd.DataFrame:
     """
     This is the main method for preprocessing the given DataFrame.
 
@@ -546,4 +548,120 @@ def process(data: pd.DataFrame, config: dict) -> None:
 
     print(f"Data shape at process method end: {data.shape}")
 
+    return data
+
+
+def create_emb_only(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd.DataFrame:
+    """
+    This method only processes the title, synopsis, genres and studios columns for embedding generation.
+
+    Args:
+        data (pd.DataFrame): The DataFrame to be processed.
+        studios_n_feat (int): The number of features to use for the studio FeatureHasher.
+        config (dict): Config containing the model path.
+
+    Returns:
+        pd.DataFrame: The processed DataFrame. This DataFrame only contains id, synopsis, genres, studios and related columns.
+    """
+
+    data = data[['id', 'synopsis', 'title',
+                 'genres', 'studios']].copy()
+    data.dropna(inplace=True)
+
+    print("Cleaning text data...")
+
+    def clean_text(text):
+        # Unicode normalization
+        text = unicodedata.normalize('NFKC', text)
+        # Replace en dash with hyphen
+        text = text.replace('\u2013', '\u002d')
+        # Replace multiplication sign with x
+        text = text.replace('\u00d7', '\u0078')
+        # Normalize hyphenated words
+        text = tprep.normalize.hyphenated_words(
+            text)
+        # Normalize quotation marks
+        text = tprep.normalize.quotation_marks(
+            text)
+        # Normalize bullet points
+        text = tprep.normalize.bullet_points(text)
+        # Normalize whitespace
+        text = tprep.normalize.whitespace(text)
+        # Remove accents
+        text = tprep.remove.accents(text)
+        # Remove HTML tags if any
+        text = re.sub(r'<.*?>', '', text)
+        # Remove source citations
+        text = re.sub(r"\([\s+]?source.*?\)+", "", text,
+                      flags=re.IGNORECASE)
+        # Remove MAL citations
+        text = re.sub(r"\[Writ.*?by.*?\]", "", text)
+        # Normalize whitespace
+        text = re.sub(r"\s+", " ", text)
+        # Strip leading and trailing whitespace
+        text = text.strip()
+        return text
+
+    data['synopsis'] = data['synopsis'].apply(clean_text)
+    data['related'] = data['title'].apply(clean_text)
+    data.drop(columns=['title'], inplace=True)
+
+    print("Preprocessing genres...")
+
+    genres = {
+        'Action', 'Adventure', 'Avant Garde', 'Award Winning', 'Boys Love', 'Comedy',
+        'Drama', 'Fantasy', 'Girls Love', 'Gourmet', 'Horror', 'Mystery', 'Romance',
+        'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Suspense', 'Ecchi',
+        'Erotica', 'Hentai', 'Adult Cast', 'Anthropomorphic', 'CGDCT', 'Childcare',
+        'Combat Sports', 'Crossdressing', 'Delinquents', 'Detective', 'Educational',
+        'Gag Humor', 'Gore', 'Harem', 'High Stakes Game', 'Historical', 'Idols (Female)',
+        'Idols (Male)', 'Isekai', 'Iyashikei', 'Love Polygon', 'Magical Sex Shift',
+        'Mahou Shoujo', 'Martial Arts', 'Mecha', 'Medical', 'Military', 'Music',
+        'Mythology', 'Organized Crime', 'Otaku Culture', 'Parody', 'Performing Arts',
+        'Pets', 'Psychological', 'Racing', 'Reincarnation', 'Reverse Harem',
+        'Romantic Subtext', 'Samurai', 'School', 'Showbiz', 'Space',
+        'Strategy Game', 'Super Power', 'Survival', 'Team Sports', 'Time Travel',
+        'Vampire', 'Video Game', 'Visual Arts', 'Workplace', 'Josei',
+        'Kids', 'Seinen', 'Shoujo', 'Shounen',
+    }
+
+    assert len(
+        genres) == 76, "Incorrect number of genres, check list and compare to MAL"
+
+    def f(entry):
+        genres_set = set(genre['name'] for genre in entry)
+        return genres_set
+
+    data['genres'] = data['genres'].apply(f)
+
+    genre_mlb = MultiLabelBinarizer()
+    genre_mlb.fit([genres])
+    data['genres'] = data['genres'].apply(
+        lambda x: genre_mlb.transform([x]).reshape(-1,))
+
+    print("Preprocessing studios...")
+
+    def g(entry):
+        studios_set = [studio['name'] for studio in entry]
+        return studios_set
+
+    data['studios'] = data['studios'].apply(g)
+
+    # Use FeatureHasher to encode studios
+    studio_hasher = FeatureHasher(
+        n_features=studios_n_feat, input_type='string')
+    studios_hashed = studio_hasher.transform(data['studios']).toarray()
+    data['studios'] = [hash for hash in studios_hashed]
+    data['studios'] = data['studios'].apply(lambda x: x.reshape(-1,))
+
+    # Generate embeddings
+    print("Generating embeddings...")
+    synopsis_df, related_df = _create_embeddings(data, config)
+
+    # Join all data
+    print("Merging data...")
+    data = data.merge(synopsis_df, on='id', how='left')
+    data = data.merge(related_df, on='id', how='left')
+
+    print(f"Final data shape: {data.shape}")
     return data
