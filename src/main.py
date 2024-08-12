@@ -7,7 +7,7 @@ from pymilvus import (Collection, CollectionSchema, DataType, FieldSchema,
                       connections, utility)
 from thefuzz import fuzz, process
 
-from src.recommendation.recommend import Recommender
+from recommend import Recommender
 
 
 def _replace_placeholders(data) -> dict:
