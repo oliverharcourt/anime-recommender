@@ -30,3 +30,6 @@ Repository = "https://github.com/oliverharcourt/anime-recommender"
 
 [project.scripts]
 animerec = "anime_recommender.main:main"
+
+[tool.setuptools.packages.find]
+where = ["anime_recommender"]
