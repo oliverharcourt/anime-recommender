@@ -1,11 +1,11 @@
 install:
-	echo "Installing..."
+	@echo "Installing..."
 	pip install -U .
 
 uninstall:
-	echo "Uninstalling..."
+	@echo "Uninstalling..."
 	pip uninstall anime_recommender
 
 clean:
-	echo "Cleaning..."
+	@echo "Cleaning..."
 	rm -rf build dist *.egg-info
