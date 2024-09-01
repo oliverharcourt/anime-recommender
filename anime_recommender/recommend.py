@@ -187,7 +187,7 @@ class Recommender:
 
         # Only consider animes that the user has completed
         relevant_animes = relevant_animes[relevant_animes['status']
-                                          == 'completed']  # .head(3)
+                                          == 'completed']
 
         # print(f"Relevant animes: {relevant_animes}")
 
@@ -196,7 +196,7 @@ class Recommender:
         ids = relevant_animes['id'].tolist()
 
         exclude_ids_from_status = {
-            'dropped', 'on_hold', 'watching', 'completed'
+            'dropped', 'on_hold', 'watching', 'completed', 'plan_to_watch'
         }
         exclude_ids = user_anime_list.loc[user_anime_list['status'].isin(
             exclude_ids_from_status)].drop_duplicates(subset='id')['id'].tolist()
@@ -227,7 +227,7 @@ class Recommender:
         return res
 
     def _scale_recommendations(
-            self, recommendations: dict[int, tuple[int, list]], default_score: int = 7) -> dict[int, list]:
+            self, recommendations: dict[int, tuple[int, list]], default_score: float = 7.0) -> dict[int, list]:
         """Scales recommendations by multiplying similarity scores with user scores.
 
         Args:
@@ -282,13 +282,18 @@ class Recommender:
         """
         user_anime_list = self._get_user_anime_list(user_name)
 
+        median_score = user_anime_list[user_anime_list['score'] != 0]['score'].median(
+        )
+        print(f"Median score: {median_score}")
+
         if len(user_anime_list) == 0:
             return self._get_random_recommendations(limit)
 
         recommendations = self._get_topk_recommendations(
             user_anime_list, limit)
 
-        recommendations = self._scale_recommendations(recommendations)
+        recommendations = self._scale_recommendations(
+            recommendations, default_score=median_score)
 
         recommendations = pd.DataFrame(
             self._flatsort_recommendations(recommendations))
