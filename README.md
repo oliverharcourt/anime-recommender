@@ -2,11 +2,13 @@
 
 ## General Info
 
-This project is a simple recommendation engine for MyAnimeList. It uses Milvus to search for similar animes to the ones in a users anime list.
+This project is a simple recommendation engine for MyAnimeList. It uses a fine-tuned BERT model to generate embeddings for animes, and Milvus for similarity search in this embedding space.
 
 ## Usage
 
-To use this project to generate anime recommendations for a given MAL account, simply run:
+The code relies on a running [Milvus docker container](https://milvus.io/docs/install_standalone-docker.md).
+
+To generate anime recommendations for a given MAL account, simply run:
 
 ```shell
 $ python main.py -u [user_name]
