@@ -303,6 +303,7 @@ class Recommender:
         """
 
         # Get the animes embedding
+        anime_id = int(anime_id)
         vectors = self._get_db_entries_by_id([anime_id])
         #  There should only be one anime with the given id
         vector = vectors[0]
