@@ -6,12 +6,13 @@ from pymilvus import AnnSearchRequest, Collection, SearchResult, WeightedRanker
 
 
 class Recommender:
+    """Recommends anime to users based on their anime list or to an anime based on its ID."""
 
     def __init__(self, config, collection, dataset):
         self.config: dict = config
         self.anime_collection: Collection = collection
         self.anime_df: pd.DataFrame = dataset
-        self.BASE_URL: str = config['BASE_URL']
+        self.base_url: str = config['BASE_URL']
         self.request_headers = {
             'Authorization': f"Bearer {config['MAL_ACCESS_TOKEN']}"}
 
@@ -21,12 +22,10 @@ class Recommender:
         user_anime_df = pd.DataFrame({'id': [], 'title': [], 'score': [], 'status': [
         ], 'episodes_watched': [], 'rewatching': []}).astype(
             {'id': 'int32', 'title': 'string', 'score': 'int32', 'status': 'string', 'episodes_watched': 'int32', 'rewatching': 'bool'})
-        # print(f"Created empty user anime list dataframe: {user_anime_df}")
 
         # request user anime list from MAL api
         print(
             f"Fetching anime list for user: {user_name}")
-        # Set initial offset
         offset = 0
 
         # While there are more animes to fetch
@@ -40,7 +39,7 @@ class Recommender:
                     # 'status': 'completed',
                 }
                 user_anime_list = requests.get(
-                    url=f"{self.BASE_URL}/users/{user_name}/animelist",
+                    url=f"{self.base_url}/users/{user_name}/animelist",
                     headers=self.request_headers,
                     params=params,
                     timeout=10
@@ -49,7 +48,6 @@ class Recommender:
             except Exception as e:
                 print(e)
 
-            # print(f"response status: {user_anime_list.status_code}")
             if user_anime_list.status_code != 200:
                 print(
                     f"Failed to fetch anime list for user: {user_name}, status code: {user_anime_list.status_code}")
@@ -62,7 +60,6 @@ class Recommender:
 
             offset += limit
 
-        # print("Adding user anime list to dataframe...")
         for entry in user_anime_list['data']:
             merged = entry['node'] | entry['list_status']
             new_row = {'id': int(merged['id']), 'title': merged['title'],
@@ -105,7 +102,6 @@ class Recommender:
                 "metric_type": "COSINE",
                 "params": {"nprobe": self.config['nprobe']['text']}
             },
-            # Exclude the query anime from the search results
             "expr": f"id not in {exclude_ids}",
             "limit": limit
         }
@@ -117,7 +113,6 @@ class Recommender:
                 "metric_type": "L2",
                 "params": {"nprobe": self.config['nprobe']['other']}
             },
-            # Exclude the query anime from the search results
             "expr": f"id not in {exclude_ids}",
             "limit": limit
         }
@@ -129,7 +124,6 @@ class Recommender:
                 "metric_type": "L2",
                 "params": {"nprobe": self.config['nprobe']['other']}
             },
-            # Exclude the query anime from the search results
             "expr": f"id not in {exclude_ids}",
             "limit": limit
         }
@@ -157,60 +151,43 @@ class Recommender:
         return res
 
     def _get_db_entries_by_id(self, ids: list) -> SearchResult:
-        # Get anime embeddings from vector database
         res = self.anime_collection.query(
             expr=f"id in {ids}",
             output_fields=["*"]
         )
-
         return res
 
     def _get_topk_recommendations(
             self, user_anime_list: pd.DataFrame, limit: int) -> dict[int, tuple[int, list]]:
-        # print(f"Columns of user anime list: {user_anime_list.columns}")
-        print("Getting topk recommendations...")
 
         # Filter out animes that are not in the dataset and drop duplicate
         # animes
         relevant_animes = user_anime_list.loc[user_anime_list['id'].isin(
             self.anime_df['id']), ['id', 'score', 'status']]
 
-        print(
-            f"Num anime in user list: {len(user_anime_list)}, Num relevant animes: {len(relevant_animes)}")
-        print(
-            f"Animes not in dataset: {user_anime_list[~user_anime_list['id'].isin(self.anime_df['id'])]}")
+        # print(f"Num anime in user list: {len(user_anime_list)}, Num relevant animes: {len(relevant_animes)}")
+        # print(f"Animes not in dataset: {user_anime_list[~user_anime_list['id'].isin(self.anime_df['id'])]}")
+        # TODO: Add never seen animes to the local dataset
 
         relevant_animes.drop_duplicates(subset='id', inplace=True)
 
-        print(
-            f"Num relevant animes after dropping duplicates: {len(relevant_animes)}")
+        # print(f"Num relevant animes after dropping duplicates: {len(relevant_animes)}")
 
-        # Only consider animes that the user has completed
+        # Recommendations only based on animes the user has completed
         relevant_animes = relevant_animes[relevant_animes['status']
                                           == 'completed']
 
-        # print(f"Relevant animes: {relevant_animes}")
-
-        # ids of animes to fetch from the database to use as the query vectors
-        # of the hybrid search
         ids = relevant_animes['id'].tolist()
 
-        exclude_ids_from_status = {
+        excluded_status = {
             'dropped', 'on_hold', 'watching', 'completed', 'plan_to_watch'
         }
-        exclude_ids = user_anime_list.loc[user_anime_list['status'].isin(
-            exclude_ids_from_status)].drop_duplicates(subset='id')['id'].tolist()
+        excluded_ids = user_anime_list.loc[user_anime_list['status'].isin(
+            excluded_status)].drop_duplicates(subset='id')['id'].tolist()
 
-        print(f"Number of ids to exclude: {len(exclude_ids)}")
-
-        # print(f"exclude_ids: {sorted(exclude_ids)}")
-
-        # Get anime embeddings from vector database
         present_animes = self._get_db_entries_by_id(ids)
 
         res = {}
-
-        print("Performing similarity search...")
 
         # Perform hybrid search
         for anime in present_animes:
@@ -219,44 +196,43 @@ class Recommender:
                                           == anime_id]['score'].values[0]
 
             query_res = self._do_hybrid_search(
-                anime, limit=limit, exclude_ids=exclude_ids)
-            # We need a map from query anime id to recommendations generated
-            # from that anime to scale the similarity scores later
+                anime, limit=limit, exclude_ids=excluded_ids)
+            # Map from query anime id to recommendations generated
+            # from that anime for later weighting
             res[anime_id] = (anime_score, query_res)
-
         return res
 
     def _scale_recommendations(
-            self, recommendations: dict[int, tuple[int, list]], default_score: float = 7.0) -> dict[int, list]:
-        """Scales recommendations by multiplying similarity scores with user scores.
+            self, recommendations: dict[int, tuple[int, list]], default_scaling_factor: float = 7.0) -> dict[int, list]:
+        """Scales recommendations.
 
         Args:
             recommendations: A dictionary mapping anime IDs to tuples of
                 (user_score, list_of_recommendations).
+                default_scaling_factor: Factor to scale the similarity scores with, defaults to 7.0.
 
         Returns:
             A dictionary mapping anime IDs to scaled recommendation lists.
         """
-        scaled_recommendations = {}  # Initialize the result dictionary
+
+        scaled_recommendations = {}
 
         for content_id, (user_score,
                          recommendation_list) in recommendations.items():
-            # Iterate over each content ID and its associated tuple
 
             scaled_list = []
             # Iterate over each recommendation
             for rec in recommendation_list[0]:
                 # Initialize the scaled recommendation as a dictionary, since
                 # rec is a pymilvus.Hit object
-                # print(f"rec: {rec}")
                 scaled_rec = {}
                 scaled_rec['id'] = rec.pk  # Copy the anime ID
                 scaled_rec['distance'] = rec.score  # Copy the similarity score
-                factor = user_score if user_score != 0 else default_score
+                factor = user_score if user_score != 0 else default_scaling_factor
                 scaled_rec['user_score'] = user_score
                 scaled_rec['factor'] = factor
                 scaled_rec["scaled_distance"] = scaled_rec['distance'] * factor
-                scaled_list.append(scaled_rec)  # Add the scaled recommendation
+                scaled_list.append(scaled_rec)
 
             scaled_recommendations[content_id] = scaled_list
 
@@ -264,6 +240,14 @@ class Recommender:
 
     def _flatsort_recommendations(
             self, recommendations: dict[int, list]) -> list[dict]:
+        """Flattens and sorts recommendations.
+
+        Args:
+            recommendations: A dictionary mapping anime IDs to lists of recommendations.
+
+        Returns:
+            A flattened, sorted list of recommendations.
+        """
         flattend_recommendations = []
         for recommendation_list in recommendations.values():
             flattend_recommendations.extend(recommendation_list)
@@ -282,9 +266,9 @@ class Recommender:
         """
         user_anime_list = self._get_user_anime_list(user_name)
 
+        # Median score for later weighting
         median_score = user_anime_list[user_anime_list['score'] != 0]['score'].median(
         )
-        print(f"Median score: {median_score}")
 
         if len(user_anime_list) == 0:
             return self._get_random_recommendations(limit)
@@ -293,7 +277,7 @@ class Recommender:
             user_anime_list, limit)
 
         recommendations = self._scale_recommendations(
-            recommendations, default_score=median_score)
+            recommendations, default_scaling_factor=median_score)
 
         recommendations = pd.DataFrame(
             self._flatsort_recommendations(recommendations))
@@ -317,8 +301,6 @@ class Recommender:
         Returns:
             pd.DataFrame: A dataframe containing the recommended anime.
         """
-
-        print(f"Recommendations for anime with id: {anime_id}")
 
         # Get the animes embedding
         vectors = self._get_db_entries_by_id([anime_id])
