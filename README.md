@@ -33,7 +33,7 @@ The ``l`` flag can be used to specify the desired number of recommendations to g
 ## Examples
 
 ```shell
-$ python main.py -a "One"
+$ python anime_recommender/main.py -a "One"
 
 The following animes were found:
 1. One Piece
@@ -56,7 +56,7 @@ Recommendations for anime with id: 21
 9  53998       0.6  https://myanimelist.net/anime/53998
 ```
 ```shell
-$ python main.py -a "Death" -l 15
+$ python anime_recommender/main.py -a "Death" -l 15
 
 The following animes were found:
 1. Death Note
