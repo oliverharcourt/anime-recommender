@@ -8,16 +8,22 @@ This project is a simple recommendation engine for MyAnimeList. It uses a fine-t
 
 The code relies on a running [Milvus docker container](https://milvus.io/docs/install_standalone-docker.md).
 
+To download and process the dataset run:
+
+```shell
+$ python anime_recommender/main.py -c
+```
+
 To generate anime recommendations for a given MAL account, simply run:
 
 ```shell
-$ python main.py -u [user_name]
+$ python anime_recommender/main.py -u [user_name]
 ```
 
 To generate recommendations based on a single anime, run:
 
 ```shell
-$ python main.py -a [anime_title]
+$ python anime_recommender/main.py -a [anime_title]
 ```
 
 The script uses a fuzzy search over the anime dataset to find the animes matching the search string. This process will ask the user to select the correct anime.
