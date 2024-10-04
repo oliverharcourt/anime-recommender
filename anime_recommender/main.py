@@ -8,6 +8,8 @@ from pymilvus import (Collection, CollectionSchema, DataType, FieldSchema,
 from thefuzz import fuzz, process
 
 from recommend import Recommender
+import data_loader
+import preprocess
 
 
 def _replace_placeholders(data) -> dict:
@@ -195,14 +197,35 @@ def main():
     group.add_argument("-u", "--username", help="Username for recommendations")
     group.add_argument(
         "-a", "--anime", help="Anime title for similar recommendations")
+    group.add_argument("-c", "--create", action="store_true",
+                       help="Create the dataset from scratch")
 
     parser.add_argument("-l", "--limit", type=int, default=10,
                         help="Number of recommendations to return")
 
     args = parser.parse_args()
 
-    # Load the configuration, dataset and collection
     config = _load_config(config_path="config.json")
+
+    if args.create:
+        access_token = config["recommender"]["MAL_ACCESS_TOKEN"]
+        headers = {
+            'Authorization': f'Bearer {access_token}'
+        }
+        collector = data_loader.DataCollector(headers=headers, base_url=config["recommender"]["BASE_URL"],
+                                              request_delay=4.15)
+        collector.run_collection(
+            media_type="anime", output_path=config["dataset"])
+
+        # Preprocess the dataset
+        dataset_raw = pd.read_json(config["dataset"], orient='records')
+        dataset_preprocessed = preprocess.make_embeddings(
+            data=dataset_raw, studios_n_feat=config["vector_database"]["studios_dim"], config=config["preprocessing"])
+        dataset_preprocessed.to_json(
+            "mal_anime_dataset_embedded.json", orient='records')
+        return
+
+    # Load the dataset and collection
     dataset = _load_dataset(config['dataset'])
     collection = _load_collection(config=config['vector_database'])
 

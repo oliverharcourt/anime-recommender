@@ -1,32 +1,11 @@
 {
     "preprocessing": {
         "model_path": "anime_recommender/models/animeBERT",
-        "simple": {
-            "nsfw": "anime_recommender/preprocessing/models/simple/nsfw.pkl",
-            "source": "anime_recommender/preprocessing/models/simple/source.pkl",
-            "status": "anime_recommender/preprocessing/models/simple/status.pkl",
-            "mean": "anime_recommender/preprocessing/models/simple/mean.pkl",
-            "popularity": "anime_recommender/preprocessing/models/simple/popularity.pkl",
-            "num_scoring_users": "anime_recommender/preprocessing/models/simple/num_scoring_users.pkl",
-            "num_episodes": "anime_recommender/preprocessing/models/simple/num_episodes.pkl",
-            "average_episode_duration": "anime_recommender/preprocessing/models/simple/average_episode_duration.pkl",
-            "statistics.status.watching": "anime_recommender/preprocessing/models/simple/statistics_status_watching.pkl",
-            "statistics.status.completed": "anime_recommender/preprocessing/models/simple/statistics_status_completed.pkl",
-            "statistics.status.on_hold": "anime_recommender/preprocessing/models/simple/statistics_status_on_hold.pkl",
-            "statistics.status.dropped": "anime_recommender/preprocessing/models/simple/statistics_status_dropped.pkl",
-            "statistics.status.plan_to_watch": "anime_recommender/preprocessing/models/simple/statistics_status_plan_to_watch.pkl",
-            "statistics.num_list_users": "anime_recommender/preprocessing/models/simple/statistics_num_list_users.pkl"
-        },
-        "time_diff": "anime_recommender/preprocessing/models/time_diff.pkl",
-        "start_season_year": "anime_recommender/preprocessing/models/start_season_year.pkl",
-        "start_season_season": "anime_recommender/preprocessing/models/start_season_season.pkl",
-        "genres": "anime_recommender/preprocessing/models/genres.pkl",
-        "studios": "anime_recommender/preprocessing/models/studios.pkl",
-        "media_type": "anime_recommender/preprocessing/models/media_type.pkl"
+        "embedding_dim": 768
     },
     "dataset": "data/raw/mal_anime_data.json",
     "vector_database": {
-        "embedded_dataset_path": "data/processed/full_data_ready_for_vecdb.json",
+        "embedded_dataset_path": "data/processed/mal_anime_dataset_embedded.json",
         "collection_name": "anime_collection",
         "host": "localhost",
         "port": "19530",
