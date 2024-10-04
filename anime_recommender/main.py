@@ -28,16 +28,6 @@ def _replace_placeholders(data) -> dict:
     return data
 
 
-def _ammend_paths(config: dict, project_root: str) -> dict:
-    for key, value in config.items():
-        if isinstance(value, dict):
-            config[key] = _ammend_paths(value, project_root)
-        elif isinstance(value, str) and not value.startswith('/'):
-            if os.path.exists(os.path.join(project_root, value)):
-                config[key] = os.path.join(project_root, value)
-    return config
-
-
 def _load_config(config_path: str) -> dict:
     """Loads the config file from the path.
 
@@ -51,8 +41,6 @@ def _load_config(config_path: str) -> dict:
         FileNotFoundError: If the config file does not exist.
     """
 
-    # project_root = os.path.dirname(os.path.abspath(__file__))
-
     if not os.path.exists(config_path):
         raise FileNotFoundError(
             f"Config directory {config_path} does not exist.")
@@ -61,17 +49,14 @@ def _load_config(config_path: str) -> dict:
 
     config = _replace_placeholders(config)
 
-    # this might not be necessary
-    # config = _ammend_paths(config, project_root)
-
     return config
 
 
-def _load_collection(config: dict) -> Collection:
+def _load_collection(config: dict, chunk_size: int = 1000) -> Collection:
     """Loads the vector database collection with anime embeddings.
 
     Args:
-        collection_name (str): The name of the collection.
+        config (dict): The configuration for the vector database.
 
     Returns:
         Collection: The collection object.
@@ -137,9 +122,11 @@ def _load_collection(config: dict) -> Collection:
         field_name="studios", index_params=index_params_gen_stud)
 
     collection.load()
-    vector_dataset = _load_dataset(config["dataset_path"])
 
-    chunk_size = 1000
+    # Could add download and embedding generation here
+
+    vector_dataset = _load_dataset(config["embedded_dataset_path"])
+
     for i in range(0, len(vector_dataset), chunk_size):
         print(
             f"Inserting chunk {i//chunk_size + 1} of {len(vector_dataset)//chunk_size + 1}")
@@ -165,44 +152,6 @@ def _load_dataset(dataset_path: str) -> pd.DataFrame:
         raise FileNotFoundError(
             f"Dataset file {dataset_path} does not exist.")
     return pd.read_json(dataset_path, orient='records')
-
-
-def _dispatch_user_recommendation(user_name: str, limit: int, collection: Collection, dataset: pd.DataFrame, config: dict):
-    """Dispatches the recommendation task for a user to the recommender.
-
-    Args:
-        user_name (str): The name of the user to recommend anime to.
-        limit (int): The number of anime to recommend.
-        collection (Collection): The vector database collection.
-        dataset (pd.DataFrame): The raw anime dataset.
-        config (dict): The recommender configuration.
-    """
-
-    recommender = Recommender(
-        config=config,
-        collection=collection,
-        dataset=dataset)
-    # print is just for testing
-    print(recommender.recommend_by_username(user_name=user_name, limit=limit))
-
-
-def _dispatch_anime_recommendations(anime_id: int, limit: int, collection: Collection, dataset: pd.DataFrame, config: dict):
-    """Dispatches the recommendation task for an anime to the recommender.
-
-    Args:
-        anime_id (int): The ID of the anime to recommend similar anime for.
-        limit (int): The number of anime to recommend.
-        collection (Collection): The vector database collection.
-        dataset (pd.DataFrame): The raw anime dataset.
-        config (dict): The recommender configuration.
-    """
-
-    recommender = Recommender(
-        config=config,
-        collection=collection,
-        dataset=dataset)
-    # print is just for testing
-    print(recommender.recommend_by_id(anime_id=anime_id, limit=limit))
 
 
 def _find_anime(title_query: str, dataset: pd.DataFrame) -> int | None:
@@ -237,31 +186,10 @@ def _find_anime(title_query: str, dataset: pd.DataFrame) -> int | None:
     return dataset.iloc[res[int(choice)-1][2]]['id']
 
 
-def main(args):
+def main():
     """Main function for the anime recommendation system.
-
-    Args:
-        args (argparse.Namespace): The command line arguments.
     """
 
-    config = _load_config(config_path="config.json")
-
-    # Load the raw dataset
-    dataset = _load_dataset(config['dataset'])
-    # Load the vector database collection
-    collection = _load_collection(config=config['vector_database'])
-    # print(f"args: {args}")
-    # Dispatch the recommendation task
-    if args.username:
-        _dispatch_user_recommendation(user_name=args.username, limit=args.limit,
-                                      collection=collection, dataset=dataset, config=config['recommender'])
-    elif args.anime:
-        anime_id = _find_anime(title_query=args.anime, dataset=dataset)
-        _dispatch_anime_recommendations(anime_id=anime_id, limit=args.limit,
-                                        collection=collection, dataset=dataset, config=config['recommender'])
-
-
-if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Anime Recommendation System')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-u", "--username", help="Username for recommendations")
@@ -272,4 +200,27 @@ if __name__ == '__main__':
                         help="Number of recommendations to return")
 
     args = parser.parse_args()
-    main(args)
+
+    # Load the configuration, dataset and collection
+    config = _load_config(config_path="config.json")
+    dataset = _load_dataset(config['dataset'])
+    collection = _load_collection(config=config['vector_database'])
+
+    recommender = Recommender(
+        config=config,
+        collection=collection,
+        dataset=dataset)
+
+    recommendations = None
+
+    # Dispatch the recommendation task
+    if args.username:
+        recommendations = recommender.recommend_by_username(
+            user_name=args.user_name, limit=args.limit)
+    elif args.anime:
+        anime_id = _find_anime(title_query=args.anime, dataset=dataset)
+        recommendations = recommender.recommend_by_id(
+            anime_id=anime_id, limit=args.limit)
+
+    # Could add fancy printing here
+    print(recommendations)
