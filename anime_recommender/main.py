@@ -8,8 +8,8 @@ from pymilvus import (Collection, CollectionSchema, DataType, FieldSchema,
 from thefuzz import fuzz, process
 
 from recommend import Recommender
-# import data_loader
-# import preprocess
+import data_loader
+import preprocess
 
 
 def _replace_placeholders(data) -> dict:
@@ -197,8 +197,8 @@ def main():
     group.add_argument("-u", "--username", help="Username for recommendations")
     group.add_argument(
         "-a", "--anime", help="Anime title for similar recommendations")
-    group.add_argument("-c", "--create", action="store_true",
-                       help="Create the dataset from scratch")
+    group.add_argument("-r", "--rebuild", action="store_true",
+                       help="Rebuild the dataset from scratch")
 
     parser.add_argument("-l", "--limit", type=int, default=10,
                         help="Number of recommendations to return")
@@ -207,7 +207,6 @@ def main():
 
     config = _load_config(config_path="config.json")
 
-    """
     if args.create:
         access_token = config["recommender"]["MAL_ACCESS_TOKEN"]
         headers = {
@@ -225,7 +224,6 @@ def main():
         dataset_preprocessed.to_json(
             "mal_anime_dataset_embedded.json", orient='records')
         return
-    """
 
     # Load the dataset and collection
     dataset = _load_dataset(config['dataset'])
