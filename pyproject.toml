@@ -1,35 +1,25 @@
-[build-system]
-requires = ["setuptools>=70.0.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "anime_recommender"
-version = "0.0.1"
-dependencies = [
-    "pandas",
-    "pymilvus",
-    "thefuzz",
-    "textacy",
-    "transformers",
-    "torch",
-    "numpy",
-    "accelerate"
-]
-requires-python = ">=3.10"
-authors = [{name = "Oliver Harcourt", email = "oliver.harcourt@proton.me"}]
-description = "A simple anime recommendation system."
+[tool.poetry]
+name = "anime-recommender"
+version = "0.1.0"
+description = "A simple recommendation system for Anime."
+authors = ["Oliver Harcourt <96662442+oliverharcourt@users.noreply.github.com>"]
+license = "MIT"
 readme = "README.md"
-classifiers = [
-    "Programming Language :: Python :: 3.11",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: Unix"
-]
 
-[project.urls]
-Repository = "https://github.com/oliverharcourt/anime-recommender"
+[tool.poetry.dependencies]
+python = "^3.11"
+pandas = "^2.2.3"
+pymilvus = "^2.4.8"
+thefuzz = "^0.22.1"
+requests = "^2.32.3"
+textacy = "^0.13.0"
+torch = "^2.5.0"
+scikit-learn = "^1.5.2"
+transformers = "^4.45.2"
 
-[project.scripts]
-animerec = "anime_recommender.main:main"
+[tool.poetry.group.dev.dependencies]
+datasets = "^3.0.1"
 
-[tool.setuptools.packages.find]
-where = ["anime_recommender"]
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
