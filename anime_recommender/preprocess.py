@@ -1,8 +1,8 @@
 import re
 import unicodedata
 
+import cleantext
 import pandas as pd
-import textacy.preprocessing as tprep
 import torch
 from sklearn.feature_extraction import FeatureHasher
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -223,6 +223,33 @@ def make_embeddings(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd
     def clean_text(text):
         # Unicode normalization
         text = unicodedata.normalize('NFKC', text)
+        text = cleantext.clean(
+            text,
+            fix_unicode=True,
+            to_ascii=True,
+            lower=False,
+            normalize_whitespace=True,
+            no_line_breaks=True,
+            strip_lines=True,
+            keep_two_line_breaks=False,
+            no_urls=True,
+            no_emails=True,
+            no_phone_numbers=True,
+            no_numbers=False,
+            no_digits=False,
+            no_currency_symbols=False,
+            no_punct=False,
+            no_emoji=True,
+            replace_with_url="<URL>",
+            replace_with_email="<EMAIL>",
+            replace_with_phone_number="<PHONE>",
+            replace_with_number="<NUMBER>",
+            replace_with_digit="0",
+            replace_with_currency_symbol="<CUR>",
+            replace_with_punct="",
+            lang="en"
+        )
+        """
         # Replace en dash with hyphen
         text = text.replace('\u2013', '\u002d')
         # Replace multiplication sign with x
@@ -239,6 +266,7 @@ def make_embeddings(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd
         text = tprep.normalize.whitespace(text)
         # Remove accents
         text = tprep.remove.accents(text)
+        """
         # Remove HTML tags if any
         text = re.sub(r'<.*?>', '', text)
         # Remove source citations
