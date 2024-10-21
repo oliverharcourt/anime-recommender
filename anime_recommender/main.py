@@ -170,22 +170,21 @@ def _find_anime(title_query: str, dataset: pd.DataFrame) -> int | None:
         title_query, dataset['title'], scorer=fuzz.partial_ratio)
     print("The following animes were found:")
     for i, (title, _, _) in enumerate(res):
-        print(f"{i+1}. {title}")
+        print(f"{i}. {title}")
 
     while True:
         choice = input(
-            "Select the anime you are looking for, or n to abort search (1/2/.../n): ")
+            "Select the anime you are looking for, or n to abort search (0/1/.../n): ")
 
         if choice.lower() == 'n':
             print("Search aborted.")
             return None
-        if not choice.isdigit() or int(choice) < 1 or int(choice) > len(res):
+        if not choice.isdigit() or int(choice) < 0 or int(choice) >= len(res):
             print("Invalid choice.")
             continue
-        else:
-            break
+        break
 
-    return dataset.iloc[res[int(choice)-1][2]]['id']
+    return dataset.iloc[res[int(choice)][2]]['id']
 
 
 def main():
@@ -207,7 +206,7 @@ def main():
 
     config = _load_config(config_path="config.json")
 
-    if args.create:
+    if args.rebuild:
         access_token = config["recommender"]["MAL_ACCESS_TOKEN"]
         headers = {
             'Authorization': f'Bearer {access_token}'
@@ -243,6 +242,10 @@ def main():
             user_name=args.username, limit=args.limit)
     elif args.anime:
         anime_id = _find_anime(title_query=args.anime, dataset=dataset)
+        if anime_id is None:
+            return
+        print(
+            f"Recommendations for \'{dataset[dataset['id'] == anime_id]['title']}\':")
         recommendations = recommender.recommend_by_id(
             anime_id=anime_id, limit=args.limit)
 
