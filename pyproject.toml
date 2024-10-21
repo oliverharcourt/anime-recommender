@@ -7,15 +7,16 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.10"
 pandas = "^2.2.3"
 pymilvus = "^2.4.8"
 thefuzz = "^0.22.1"
 requests = "^2.32.3"
-textacy = "^0.13.0"
-torch = "^2.5.0"
 scikit-learn = "^1.5.2"
 transformers = "^4.45.2"
+torch = "2.2.0"
+numpy = "<2.0"
+clean-text = {extras = ["gpl"], version = "^0.6.0"}
 
 [tool.poetry.group.dev.dependencies]
 datasets = "^3.0.1"
