@@ -13,6 +13,7 @@ import preprocess
 
 
 class AnimeRecommender:
+    """Main class for the anime recommendation system."""
 
     def __init__(
         self,
@@ -213,7 +214,8 @@ class AnimeRecommender:
             headers = {
                 'Authorization': f'Bearer {access_token}'
             }
-            collector = data_loader.DataCollector(headers=headers, base_url=config["recommender"]["BASE_URL"],
+            collector = data_loader.DataCollector(headers=headers,
+                                                  base_url=config["recommender"]["BASE_URL"],
                                                   request_delay=4.15)
             collector.run_collection(
                 media_type="anime", output_path=config["dataset"])
@@ -221,7 +223,9 @@ class AnimeRecommender:
             # Preprocess the dataset
             dataset_raw = pd.read_json(config["dataset"], orient='records')
             dataset_preprocessed = preprocess.make_embeddings(
-                data=dataset_raw, studios_n_feat=config["vector_database"]["studios_dim"], config=config["preprocessing"])
+                data=dataset_raw,
+                studios_n_feat=config["vector_database"]["studios_dim"],
+                config=config["preprocessing"])
             dataset_preprocessed.to_json(
                 "mal_anime_dataset_embedded.json", orient='records')
             return
