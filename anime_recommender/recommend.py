@@ -289,6 +289,12 @@ class Recommender:
 
         recommendations.reset_index(inplace=True, drop=True)
 
+        recommendations.drop(
+            columns=["distance", "user_score", "factor"], inplace=True)
+
+        recommendations.rename(
+            columns={"scaled_distance": "distance"}, inplace=True)
+
         return recommendations.head(limit)
 
     def recommend_by_id(self, anime_id: int, limit: int) -> pd.DataFrame:
