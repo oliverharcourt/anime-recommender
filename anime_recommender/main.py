@@ -7,9 +7,9 @@ from pymilvus import (Collection, CollectionSchema, DataType, FieldSchema,
                       connections, utility)
 from thefuzz import fuzz, process
 
-from recommend import Recommender
-import data_loader
-import preprocess
+from anime_recommender.recommend import Recommender
+import anime_recommender.data_loader as data_loader
+import anime_recommender.preprocess as preprocess
 
 
 class AnimeRecommender:
@@ -17,7 +17,7 @@ class AnimeRecommender:
 
     def __init__(
         self,
-        config_path: str = "config.json",  # path to config file
+        config_path: str,  # path to config file
         search_str: str = None,  # search string, username or anime title
         anime_mode: bool = False,  # if True, search string is an anime title, else a username
         rebuild: bool = False,  # if True, rebuild the dataset
