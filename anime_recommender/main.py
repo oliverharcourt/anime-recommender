@@ -8,8 +8,8 @@ from pymilvus import (Collection, CollectionSchema, DataType, FieldSchema,
 from thefuzz import fuzz, process
 
 from anime_recommender.recommend import Recommender
-import anime_recommender.data_loader as data_loader
-import anime_recommender.preprocess as preprocess
+from anime_recommender import data_loader
+from anime_recommender import preprocess
 
 
 class AnimeRecommender:
@@ -170,7 +170,7 @@ class AnimeRecommender:
                 f"Dataset file {dataset_path} does not exist.")
         return pd.read_json(dataset_path, orient='records')
 
-    def _find_anime(self, title_query: str, dataset: pd.DataFrame) -> int | None:
+    def _find_anime(self, title_query: str, dataset: pd.DataFrame, autoselect: bool = False) -> int | None:
         """Looks for animes matching the query string.
 
         Args:
@@ -181,7 +181,12 @@ class AnimeRecommender:
             int | None: The ID of the anime found, or None if the search was aborted.
         """
         res = process.extract(
-            title_query, dataset['title'], scorer=fuzz.partial_ratio)
+            title_query, dataset['title'], scorer=fuzz.partial_ratio
+        )
+
+        if autoselect:
+            return dataset.iloc[res[0][2]]['id']
+
         print("The following animes were found:")
         for i, (title, _, _) in enumerate(res):
             print(f"{i}. {title}")
@@ -200,7 +205,7 @@ class AnimeRecommender:
 
         return dataset.iloc[res[int(choice)][2]]['id']
 
-    def run(self) -> pd.DataFrame:
+    def run(self, autoselect: bool = False) -> pd.DataFrame:
         """Main function for the anime recommendation system.
 
         Returns:
@@ -214,9 +219,11 @@ class AnimeRecommender:
             headers = {
                 'Authorization': f'Bearer {access_token}'
             }
-            collector = data_loader.DataCollector(headers=headers,
-                                                  base_url=config["recommender"]["BASE_URL"],
-                                                  request_delay=4.15)
+            collector = data_loader.DataCollector(
+                headers=headers,
+                base_url=config["recommender"]["BASE_URL"],
+                request_delay=4.15
+            )
             collector.run_collection(
                 media_type="anime", output_path=config["dataset"])
 
@@ -225,9 +232,11 @@ class AnimeRecommender:
             dataset_preprocessed = preprocess.make_embeddings(
                 data=dataset_raw,
                 studios_n_feat=config["vector_database"]["studios_dim"],
-                config=config["preprocessing"])
+                config=config["preprocessing"]
+            )
             dataset_preprocessed.to_json(
-                "mal_anime_dataset_embedded.json", orient='records')
+                "mal_anime_dataset_embedded.json", orient='records'
+            )
             return
 
         # Load the dataset and collection
@@ -237,7 +246,8 @@ class AnimeRecommender:
         recommender = Recommender(
             config=config["recommender"],
             collection=collection,
-            dataset=dataset)
+            dataset=dataset
+        )
 
         recommendations = None
 
@@ -248,7 +258,10 @@ class AnimeRecommender:
                 user_name=self.search_str, limit=self.limit)
         else:
             anime_id = self._find_anime(
-                title_query=self.search_str, dataset=dataset)
+                title_query=self.search_str,
+                dataset=dataset,
+                autoselect=autoselect
+            )
             if anime_id is None:
                 return
             print(
