@@ -20,6 +20,7 @@ clean-text = {extras = ["gpl"], version = "^0.6.0"}
 
 [tool.poetry.group.dev.dependencies]
 datasets = "^3.0.1"
+ipykernel = "^6.29.5"
 
 [build-system]
 requires = ["poetry-core"]
