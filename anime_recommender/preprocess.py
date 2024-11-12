@@ -68,8 +68,13 @@ class TextDataset(Dataset):
     def __getitem__(self, idx):
         col = 'synopsis' if 'synopsis' in self.data.columns else 'related'
         text = self.data.iloc[idx][col]  # Adjust column name as necessary
-        inputs = self.tokenizer(text, padding='max_length', truncation=True,
-                                max_length=self.max_length, return_tensors="pt")
+        inputs = self.tokenizer(
+            text,
+            padding='max_length',
+            truncation=True,
+            max_length=self.max_length,
+            return_tensors="pt"
+        )
         return idx, inputs['input_ids'].squeeze(
             0), inputs['attention_mask'].squeeze(0)
 
@@ -111,12 +116,14 @@ def _generate_embeddings(data: pd.DataFrame, model_path: str,
         synopsis_dataset,
         batch_size=32,
         shuffle=False,
-        num_workers=2)
+        num_workers=2
+    )
     loader_related = DataLoader(
         related_dataset,
         batch_size=32,
         shuffle=False,
-        num_workers=2)
+        num_workers=2
+    )
     # make this a dict for access to specific loaders from calling code
     loaders = [loader_synopsis, loader_related]
 
@@ -133,9 +140,13 @@ def _generate_embeddings(data: pd.DataFrame, model_path: str,
             return 'synopsis_emb'
         elif loader == loader_related:
             return 'related_emb'
+        else:
+            raise ValueError('Invalid embedding loader')
 
     model = DistilBertForMaskedLM.from_pretrained(
-        model_path, device_map=device).base_model
+        model_path,
+        device_map=device
+    ).base_model
 
     # Generate embeddings
     for loader in loaders:
@@ -148,21 +159,28 @@ def _generate_embeddings(data: pd.DataFrame, model_path: str,
                 device), attention_masks.to(device)
             with torch.no_grad():
                 # Extract the CLS token embeddings from the last hidden state
-                embeddings = model(input_ids=input_ids,
-                                   attention_mask=attention_masks).last_hidden_state[:,
-                                                                                     0,
-                                                                                     :].detach().cpu()
+                embeddings = model(
+                    input_ids=input_ids,
+                    attention_mask=attention_masks
+                ).last_hidden_state[:, 0, :].detach().cpu()
                 embedding_tensors[tensor_key][indices.cpu()] = embeddings
 
     # Dataframes of embeddings
-    synopsis_tensor = embedding_tensors['synopsis_emb'].clone(
-    ).detach().numpy()
-    related_tensor = embedding_tensors['related_emb'].clone().detach().numpy()
+    synopsis_tensor = embedding_tensors['synopsis_emb'] \
+        .clone() \
+        .detach() \
+        .numpy()
+    related_tensor = embedding_tensors['related_emb'] \
+        .clone() \
+        .detach() \
+        .numpy()
 
-    synopsis_vectors = [synopsis_tensor[i].tolist()
-                        for i in range(synopsis_tensor.shape[0])]
-    related_vectors = [related_tensor[i].tolist()
-                       for i in range(related_tensor.shape[0])]
+    synopsis_vectors = [
+        synopsis_tensor[i].tolist() for i in range(synopsis_tensor.shape[0])
+    ]
+    related_vectors = [
+        related_tensor[i].tolist() for i in range(related_tensor.shape[0])
+    ]
 
     # We only need the id column from the original dataframes
     synopsis_df.drop(columns=['synopsis'], inplace=True)
@@ -170,9 +188,11 @@ def _generate_embeddings(data: pd.DataFrame, model_path: str,
 
     # Merge the embeddings with the id column
     synopsis_df_merge = pd.DataFrame(
-        {'id': synopsis_df['id'], 'synopsis_embedding': synopsis_vectors})
+        {'id': synopsis_df['id'], 'synopsis_embedding': synopsis_vectors}
+    )
     related_df_merge = pd.DataFrame(
-        {'id': related_df['id'], 'related_embedding': related_vectors})
+        {'id': related_df['id'], 'related_embedding': related_vectors}
+    )
 
     return synopsis_df_merge, related_df_merge
 
@@ -195,7 +215,11 @@ def _create_embeddings(
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model_path = config['model_path']
     synopsis_df, related_df = _generate_embeddings(
-        data, model_path, device, config)
+        data=data,
+        model_path=model_path,
+        device=device,
+        config=config
+    )
 
     data.drop(columns=['synopsis', 'related'], inplace=True)
     return synopsis_df, related_df
@@ -315,7 +339,8 @@ def make_embeddings(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd
     genre_mlb = MultiLabelBinarizer()
     genre_mlb.fit([genres])
     data['genres'] = data['genres'].apply(
-        lambda x: genre_mlb.transform([x]).reshape(-1,))
+        lambda x: genre_mlb.transform([x]).reshape(-1,)
+    )
 
     print("Preprocessing studios...")
 
@@ -327,7 +352,9 @@ def make_embeddings(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd
 
     # Use FeatureHasher to encode studios
     studio_hasher = FeatureHasher(
-        n_features=studios_n_feat, input_type='string')
+        n_features=studios_n_feat,
+        input_type='string'
+    )
     studios_hashed = studio_hasher.transform(data['studios']).toarray()
     data['studios'] = [hash for hash in studios_hashed]
     data['studios'] = data['studios'].apply(lambda x: x.reshape(-1,))
