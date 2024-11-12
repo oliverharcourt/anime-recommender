@@ -227,7 +227,7 @@ class AnimeRecommender:
             collector.run_collection(
                 media_type="anime",
                 output_path=config["dataset"],
-                limit=self.limit
+                limit=self.rebuild
             )
 
             # Preprocess the dataset
@@ -238,7 +238,8 @@ class AnimeRecommender:
                 config=config["preprocessing"]
             )
             dataset_preprocessed.to_json(
-                "mal_anime_dataset_embedded.json", orient='records'
+                config["vector_database"]["embedded_dataset_path"],
+                orient='records'
             )
             return
 
@@ -278,15 +279,32 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Anime Recommendation System')
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("-u", "--username",
-                       help="Username for recommendations")
     group.add_argument(
-        "-a", "--anime", help="Anime title for similar recommendations")
-    group.add_argument("-r", "--rebuild", action="store_true",
-                       help="Rebuild the dataset from scratch")
+        "-u",
+        "--username",
+        help="Username for recommendations"
+    )
+    group.add_argument(
+        "-a",
+        "--anime",
+        help="Anime title for similar recommendations"
+    )
+    group.add_argument(
+        "-r",
+        "--rebuild",
+        # action="store_true",
+        default=0,
+        type=int,
+        help="Rebuild the dataset from scratch"
+    )
 
-    parser.add_argument("-l", "--limit", type=int, default=10,
-                        help="Number of recommendations to return")
+    parser.add_argument(
+        "-l",
+        "--limit",
+        type=int,
+        default=10,
+        help="Number of recommendations to return"
+    )
 
     args = parser.parse_args()
 
