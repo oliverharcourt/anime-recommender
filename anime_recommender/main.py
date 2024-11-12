@@ -84,7 +84,7 @@ class AnimeRecommender:
         collection_name = config['collection_name']
 
         if collection_name in utility.list_collections():
-            print("Collection found, loading...")
+            # print("Collection found, loading...")
             ret_col = Collection(collection_name)
             ret_col.load()
             return ret_col
@@ -225,7 +225,10 @@ class AnimeRecommender:
                 request_delay=4.15
             )
             collector.run_collection(
-                media_type="anime", output_path=config["dataset"])
+                media_type="anime",
+                output_path=config["dataset"],
+                limit=self.limit
+            )
 
             # Preprocess the dataset
             dataset_raw = pd.read_json(config["dataset"], orient='records')
@@ -253,7 +256,7 @@ class AnimeRecommender:
 
         # Dispatch the recommendation task
         if not self.anime_mode:
-            print(f"Recommendations for user {self.search_str}:")
+            # print(f"Recommendations for user {self.search_str}:")
             recommendations = recommender.recommend_by_username(
                 user_name=self.search_str, limit=self.limit)
         else:
@@ -264,8 +267,7 @@ class AnimeRecommender:
             )
             if anime_id is None:
                 return
-            print(
-                f"Recommendations for \'{dataset[dataset['id'] == anime_id]['title']}\':")
+            # print(f"Recommendations for \'{dataset[dataset['id'] == anime_id]['title']}\':")
             recommendations = recommender.recommend_by_id(
                 anime_id=anime_id, limit=self.limit)
 
