@@ -18,7 +18,7 @@ class DataCollector:
         self.base_url = base_url
         self.request_delay = request_delay
 
-    def collect_anime_data(self) -> pd.DataFrame:
+    def collect_anime_data(self, limit: int) -> pd.DataFrame:
         # NOTE This method cannot retrieve the related_anime, related_manga,
         # recommendations, and statistics fields
 
@@ -120,6 +120,9 @@ class DataCollector:
 
             offset += 500
             print(f"Offset: {offset}")
+            if offset >= limit * 500:
+                print("Limit reached.")
+                break
             time.sleep(self.request_delay)
 
         anime_details_df['synopsis'] = anime_details_df['synopsis'].apply(
@@ -190,9 +193,17 @@ class DataCollector:
 
         return manga_details_df
 
-    def run_collection(self, media_type: str, output_path: str) -> None:
+    def run_collection(self, media_type: str, output_path: str, limit: int = 100_000) -> None:
+        r"""Runs the data collection process.
+
+        Args:
+            media_type (str): Type of media to collect data for (anime or manga)
+            output_path (str): Path to save the collected data
+            limit (int): Number of records to collect in batches of 500 (for anime mode only), defaults to 100_000
+        """
 
         data: pd.DataFrame = self.collect_anime_data(
+            limit
         ) if media_type == 'anime' else self.collect_manga_data()
 
         data.to_json(output_path, orient='records')
