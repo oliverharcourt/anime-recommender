@@ -324,7 +324,7 @@ def make_embeddings(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd
         'Romantic Subtext', 'Samurai', 'School', 'Showbiz', 'Space',
         'Strategy Game', 'Super Power', 'Survival', 'Team Sports', 'Time Travel',
         'Vampire', 'Video Game', 'Visual Arts', 'Workplace', 'Josei',
-        'Kids', 'Seinen', 'Shoujo', 'Shounen',
+        'Kids', 'Seinen', 'Shoujo', 'Shounen', 'Urban Fantasy', 'Love Status Quo',
     }
 
     assert len(
