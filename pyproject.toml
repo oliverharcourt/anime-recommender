@@ -17,6 +17,7 @@ transformers = "^4.45.2"
 torch = "2.2.0"
 numpy = "<2.0"
 clean-text = {extras = ["gpl"], version = "^0.6.0"}
+accelerate = "^1.1.1"
 
 [tool.poetry.group.dev.dependencies]
 datasets = "^3.0.1"
