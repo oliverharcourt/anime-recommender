@@ -14,24 +14,35 @@ class Recommender:
         self.anime_df: pd.DataFrame = dataset
         self.base_url: str = config['BASE_URL']
         self.request_headers = {
-            'Authorization': f"Bearer {config['MAL_ACCESS_TOKEN']}"}
+            'Authorization': f"Bearer {config['MAL_ACCESS_TOKEN']}"
+        }
 
     def _get_user_anime_list(self, user_name: str,
                              limit: int = 1000) -> pd.DataFrame:
         # Get users anime list through MAL api
-        user_anime_df = pd.DataFrame({'id': [], 'title': [], 'score': [], 'status': [
-        ], 'episodes_watched': [], 'rewatching': []}).astype(
-            {'id': 'int32', 'title': 'string', 'score': 'int32', 'status': 'string', 'episodes_watched': 'int32', 'rewatching': 'bool'})
+        user_anime_df = pd.DataFrame({
+            'id': [],
+            'title': [],
+            'score': [],
+            'status': [],
+            'episodes_watched': [],
+            'rewatching': []
+        }).astype({
+            'id': 'int32',
+            'title': 'string',
+            'score': 'int32',
+            'status': 'string',
+            'episodes_watched': 'int32',
+            'rewatching': 'bool'
+        })
 
         # request user anime list from MAL api
-        print(
-            f"Fetching anime list for user: {user_name}")
+        # print(f"Fetching anime list for user: {user_name}")
         offset = 0
 
         # While there are more animes to fetch
         while True:
             try:
-
                 params = {
                     'fields': 'list_status',
                     'limit': limit,
@@ -62,12 +73,18 @@ class Recommender:
 
         for entry in user_anime_list['data']:
             merged = entry['node'] | entry['list_status']
-            new_row = {'id': int(merged['id']), 'title': merged['title'],
-                       'score': int(merged['score']), 'status': merged['status'],
-                       'episodes_watched': int(merged['num_episodes_watched']),
-                       'rewatching': merged['is_rewatching']}
+            new_row = {
+                'id': int(merged['id']),
+                'title': merged['title'],
+                'score': int(merged['score']),
+                'status': merged['status'],
+                'episodes_watched': int(merged['num_episodes_watched']),
+                'rewatching': merged['is_rewatching']
+            }
             user_anime_df = pd.concat(
-                [user_anime_df, pd.DataFrame(new_row, index=[0])], ignore_index=True)
+                [user_anime_df, pd.DataFrame(new_row, index=[0])],
+                ignore_index=True
+            )
 
         return user_anime_df
 
@@ -76,7 +93,9 @@ class Recommender:
         random_sample = self.anime_df.sample(n=limit)[['id', 'title']]
 
         random_sample['link'] = random_sample.apply(
-            lambda x: f"https://myanimelist.net/anime/{int(x['id'])}", axis=1)
+            lambda x: f"https://myanimelist.net/anime/{int(x['id'])}",
+            axis=1
+        )
         return random_sample
 
     def _do_hybrid_search(self, hybrid_query_vec: dict,
@@ -192,11 +211,15 @@ class Recommender:
         # Perform hybrid search
         for anime in present_animes:
             anime_id = anime['id']
-            anime_score = relevant_animes[relevant_animes['id']
-                                          == anime_id]['score'].values[0]
+            anime_score = relevant_animes[
+                relevant_animes['id'] == anime_id
+            ]['score'].values[0]
 
             query_res = self._do_hybrid_search(
-                anime, limit=limit, exclude_ids=excluded_ids)
+                anime,
+                limit=limit,
+                exclude_ids=excluded_ids
+            )
             # Map from query anime id to recommendations generated
             # from that anime for later weighting
             res[anime_id] = (anime_score, query_res)
