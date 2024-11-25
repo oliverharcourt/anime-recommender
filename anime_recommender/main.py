@@ -79,7 +79,10 @@ class AnimeRecommender:
             Collection: The collection object.
         """
         connections.connect(
-            "default", host=config['host'], port=config['port'])
+            "default",
+            host=os.getenv("HOST"),
+            port=os.getenv("HOST_PORT")
+        )
 
         collection_name = config['collection_name']
 
