@@ -11,7 +11,7 @@ The code relies on a running [Milvus docker container](https://milvus.io/docs/in
 To download and process the dataset run:
 
 ```shell
-$ python anime_recommender/main.py -c
+$ python anime_recommender/main.py -r
 ```
 
 To generate anime recommendations for a given MAL account, simply run:
