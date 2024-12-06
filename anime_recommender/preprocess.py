@@ -66,21 +66,21 @@ class TextDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        col = 'synopsis' if 'synopsis' in self.data.columns else 'related'
+        col = "synopsis" if "synopsis" in self.data.columns else "related"
         text = self.data.iloc[idx][col]  # Adjust column name as necessary
         inputs = self.tokenizer(
             text,
-            padding='max_length',
+            padding="max_length",
             truncation=True,
             max_length=self.max_length,
-            return_tensors="pt"
+            return_tensors="pt",
         )
-        return idx, inputs['input_ids'].squeeze(
-            0), inputs['attention_mask'].squeeze(0)
+        return idx, inputs["input_ids"].squeeze(0), inputs["attention_mask"].squeeze(0)
 
 
-def _generate_embeddings(data: pd.DataFrame, model_path: str,
-                         device: str, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _generate_embeddings(
+    data: pd.DataFrame, model_path: str, device: str, config: dict
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Generates embeddings for the synopsis and related text in the given DataFrame.
 
@@ -101,11 +101,11 @@ def _generate_embeddings(data: pd.DataFrame, model_path: str,
     """
 
     # Initialize tokenizer
-    tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+    tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
 
     # Extract relevant columns
-    synopsis_df = data[['id', 'synopsis']].copy()
-    related_df = data[['id', 'related']].copy()
+    synopsis_df = data[["id", "synopsis"]].copy()
+    related_df = data[["id", "related"]].copy()
 
     # Create dataset
     synopsis_dataset = TextDataset(synopsis_df, tokenizer)
@@ -113,67 +113,58 @@ def _generate_embeddings(data: pd.DataFrame, model_path: str,
 
     # Create DataLoaders
     loader_synopsis = DataLoader(
-        synopsis_dataset,
-        batch_size=32,
-        shuffle=False,
-        num_workers=2
+        synopsis_dataset, batch_size=32, shuffle=False, num_workers=2
     )
     loader_related = DataLoader(
-        related_dataset,
-        batch_size=32,
-        shuffle=False,
-        num_workers=2
+        related_dataset, batch_size=32, shuffle=False, num_workers=2
     )
     # make this a dict for access to specific loaders from calling code
     loaders = [loader_synopsis, loader_related]
 
     # Pre-allocate embedding tensors
-    embedding_sizes = config['embedding_dim']
+    embedding_sizes = config["embedding_dim"]
     embedding_tensors = {
-        'synopsis_emb': torch.zeros(len(synopsis_dataset), embedding_sizes),
-        'related_emb': torch.zeros(len(related_dataset), embedding_sizes),
+        "synopsis_emb": torch.zeros(len(synopsis_dataset), embedding_sizes),
+        "related_emb": torch.zeros(len(related_dataset), embedding_sizes),
     }
 
     # Helper function to get the right embedding tensor key
     def get_tensor_key(loader):
         if loader == loader_synopsis:
-            return 'synopsis_emb'
+            return "synopsis_emb"
         elif loader == loader_related:
-            return 'related_emb'
+            return "related_emb"
         else:
-            raise ValueError('Invalid embedding loader')
+            raise ValueError("Invalid embedding loader")
 
     model = DistilBertForMaskedLM.from_pretrained(
-        model_path,
-        device_map=device
+        model_path, device_map=device
     ).base_model
 
     # Generate embeddings
     for loader in loaders:
         tensor_key = get_tensor_key(loader)
-        print(f'Processing {tensor_key}')
+        print(f"Processing {tensor_key}")
         for indices, input_ids, attention_masks in loader:
             if indices[0] % 1024 == 0:
                 print(indices[0])
-            input_ids, attention_masks = input_ids.to(
-                device), attention_masks.to(device)
+            input_ids, attention_masks = (
+                input_ids.to(device),
+                attention_masks.to(device),
+            )
             with torch.no_grad():
                 # Extract the CLS token embeddings from the last hidden state
-                embeddings = model(
-                    input_ids=input_ids,
-                    attention_mask=attention_masks
-                ).last_hidden_state[:, 0, :].detach().cpu()
+                embeddings = (
+                    model(input_ids=input_ids, attention_mask=attention_masks)
+                    .last_hidden_state[:, 0, :]
+                    .detach()
+                    .cpu()
+                )
                 embedding_tensors[tensor_key][indices.cpu()] = embeddings
 
     # Dataframes of embeddings
-    synopsis_tensor = embedding_tensors['synopsis_emb'] \
-        .clone() \
-        .detach() \
-        .numpy()
-    related_tensor = embedding_tensors['related_emb'] \
-        .clone() \
-        .detach() \
-        .numpy()
+    synopsis_tensor = embedding_tensors["synopsis_emb"].clone().detach().numpy()
+    related_tensor = embedding_tensors["related_emb"].clone().detach().numpy()
 
     synopsis_vectors = [
         synopsis_tensor[i].tolist() for i in range(synopsis_tensor.shape[0])
@@ -183,22 +174,23 @@ def _generate_embeddings(data: pd.DataFrame, model_path: str,
     ]
 
     # We only need the id column from the original dataframes
-    synopsis_df.drop(columns=['synopsis'], inplace=True)
-    related_df.drop(columns=['related'], inplace=True)
+    synopsis_df.drop(columns=["synopsis"], inplace=True)
+    related_df.drop(columns=["related"], inplace=True)
 
     # Merge the embeddings with the id column
     synopsis_df_merge = pd.DataFrame(
-        {'id': synopsis_df['id'], 'synopsis_embedding': synopsis_vectors}
+        {"id": synopsis_df["id"], "synopsis_embedding": synopsis_vectors}
     )
     related_df_merge = pd.DataFrame(
-        {'id': related_df['id'], 'related_embedding': related_vectors}
+        {"id": related_df["id"], "related_embedding": related_vectors}
     )
 
     return synopsis_df_merge, related_df_merge
 
 
 def _create_embeddings(
-        data: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    data: pd.DataFrame, config: dict
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Creates embeddings for the synopsis and related text in the given DataFrame.
 
@@ -212,20 +204,19 @@ def _create_embeddings(
     tuple[pd.DataFrame, pd.DataFrame]: A tuple containing two DataFrames. The first DataFrame contains the synopsis embeddings. The second DataFrame contains the related embeddings.
     """
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model_path = config['model_path']
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model_path = config["model_path"]
     synopsis_df, related_df = _generate_embeddings(
-        data=data,
-        model_path=model_path,
-        device=device,
-        config=config
+        data=data, model_path=model_path, device=device, config=config
     )
 
-    data.drop(columns=['synopsis', 'related'], inplace=True)
+    data.drop(columns=["synopsis", "related"], inplace=True)
     return synopsis_df, related_df
 
 
-def make_embeddings(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd.DataFrame:
+def make_embeddings(
+    data: pd.DataFrame, studios_n_feat: int, config: dict
+) -> pd.DataFrame:
     """
     This method only processes the title, synopsis, genres and studios columns for embedding generation.
 
@@ -238,15 +229,14 @@ def make_embeddings(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd
         pd.DataFrame: The processed DataFrame. This DataFrame only contains id, synopsis, genres, studios and related columns.
     """
 
-    data = data[['id', 'synopsis', 'title',
-                 'genres', 'studios']].copy()
+    data = data[["id", "synopsis", "title", "genres", "studios"]].copy()
     data.dropna(inplace=True)
 
     print("Cleaning text data...")
 
     def clean_text(text):
         # Unicode normalization
-        text = unicodedata.normalize('NFKC', text)
+        text = unicodedata.normalize("NFKC", text)
         text = cleantext.clean(
             text,
             fix_unicode=True,
@@ -271,7 +261,7 @@ def make_embeddings(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd
             replace_with_digit="0",
             replace_with_currency_symbol="<CUR>",
             replace_with_punct="",
-            lang="en"
+            lang="en",
         )
         """
         # Replace en dash with hyphen
@@ -292,10 +282,9 @@ def make_embeddings(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd
         text = tprep.remove.accents(text)
         """
         # Remove HTML tags if any
-        text = re.sub(r'<.*?>', '', text)
+        text = re.sub(r"<.*?>", "", text)
         # Remove source citations
-        text = re.sub(r"\([\s+]?source.*?\)+", "", text,
-                      flags=re.IGNORECASE)
+        text = re.sub(r"\([\s+]?source.*?\)+", "", text, flags=re.IGNORECASE)
         # Remove MAL citations
         text = re.sub(r"\[Writ.*?by.*?\]", "", text)
         # Normalize whitespace
@@ -304,60 +293,128 @@ def make_embeddings(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd
         text = text.strip()
         return text
 
-    data['synopsis'] = data['synopsis'].apply(clean_text)
-    data['related'] = data['title'].apply(clean_text)
-    data.drop(columns=['title'], inplace=True)
+    data["synopsis"] = data["synopsis"].apply(clean_text)
+    data["related"] = data["title"].apply(clean_text)
+    data.drop(columns=["title"], inplace=True)
 
     print("Preprocessing genres...")
 
     genres = {
-        'Action', 'Adventure', 'Avant Garde', 'Award Winning', 'Boys Love', 'Comedy',
-        'Drama', 'Fantasy', 'Girls Love', 'Gourmet', 'Horror', 'Mystery', 'Romance',
-        'Sci-Fi', 'Slice of Life', 'Sports', 'Supernatural', 'Suspense', 'Ecchi',
-        'Erotica', 'Hentai', 'Adult Cast', 'Anthropomorphic', 'CGDCT', 'Childcare',
-        'Combat Sports', 'Crossdressing', 'Delinquents', 'Detective', 'Educational',
-        'Gag Humor', 'Gore', 'Harem', 'High Stakes Game', 'Historical', 'Idols (Female)',
-        'Idols (Male)', 'Isekai', 'Iyashikei', 'Love Polygon', 'Magical Sex Shift',
-        'Mahou Shoujo', 'Martial Arts', 'Mecha', 'Medical', 'Military', 'Music',
-        'Mythology', 'Organized Crime', 'Otaku Culture', 'Parody', 'Performing Arts',
-        'Pets', 'Psychological', 'Racing', 'Reincarnation', 'Reverse Harem',
-        'Romantic Subtext', 'Samurai', 'School', 'Showbiz', 'Space',
-        'Strategy Game', 'Super Power', 'Survival', 'Team Sports', 'Time Travel',
-        'Vampire', 'Video Game', 'Visual Arts', 'Workplace', 'Josei',
-        'Kids', 'Seinen', 'Shoujo', 'Shounen', 'Urban Fantasy', 'Love Status Quo',
+        "Action",
+        "Adventure",
+        "Avant Garde",
+        "Award Winning",
+        "Boys Love",
+        "Comedy",
+        "Drama",
+        "Fantasy",
+        "Girls Love",
+        "Gourmet",
+        "Horror",
+        "Mystery",
+        "Romance",
+        "Sci-Fi",
+        "Slice of Life",
+        "Sports",
+        "Supernatural",
+        "Suspense",
+        "Ecchi",
+        "Erotica",
+        "Hentai",
+        "Adult Cast",
+        "Anthropomorphic",
+        "CGDCT",
+        "Childcare",
+        "Combat Sports",
+        "Crossdressing",
+        "Delinquents",
+        "Detective",
+        "Educational",
+        "Gag Humor",
+        "Gore",
+        "Harem",
+        "High Stakes Game",
+        "Historical",
+        "Idols (Female)",
+        "Idols (Male)",
+        "Isekai",
+        "Iyashikei",
+        "Love Polygon",
+        "Magical Sex Shift",
+        "Mahou Shoujo",
+        "Martial Arts",
+        "Mecha",
+        "Medical",
+        "Military",
+        "Music",
+        "Mythology",
+        "Organized Crime",
+        "Otaku Culture",
+        "Parody",
+        "Performing Arts",
+        "Pets",
+        "Psychological",
+        "Racing",
+        "Reincarnation",
+        "Reverse Harem",
+        "Romantic Subtext",
+        "Samurai",
+        "School",
+        "Showbiz",
+        "Space",
+        "Strategy Game",
+        "Super Power",
+        "Survival",
+        "Team Sports",
+        "Time Travel",
+        "Vampire",
+        "Video Game",
+        "Visual Arts",
+        "Workplace",
+        "Josei",
+        "Kids",
+        "Seinen",
+        "Shoujo",
+        "Shounen",
+        "Urban Fantasy",
+        "Love Status Quo",
     }
 
-    assert len(
-        genres) == 76, "Incorrect number of genres, check list and compare to MAL"
+    assert (
+        len(genres) == 76
+    ), "Incorrect number of genres, check list and compare to MAL"
 
     def f(entry):
-        genres_set = set(genre['name'] for genre in entry)
+        genres_set = set(genre["name"] for genre in entry)
         return genres_set
 
-    data['genres'] = data['genres'].apply(f)
+    data["genres"] = data["genres"].apply(f)
 
     genre_mlb = MultiLabelBinarizer()
     genre_mlb.fit([genres])
-    data['genres'] = data['genres'].apply(
-        lambda x: genre_mlb.transform([x]).reshape(-1,)
+    data["genres"] = data["genres"].apply(
+        lambda x: genre_mlb.transform([x]).reshape(
+            -1,
+        )
     )
 
     print("Preprocessing studios...")
 
     def g(entry):
-        studios_set = [studio['name'] for studio in entry]
+        studios_set = [studio["name"] for studio in entry]
         return studios_set
 
-    data['studios'] = data['studios'].apply(g)
+    data["studios"] = data["studios"].apply(g)
 
     # Use FeatureHasher to encode studios
-    studio_hasher = FeatureHasher(
-        n_features=studios_n_feat,
-        input_type='string'
+    studio_hasher = FeatureHasher(n_features=studios_n_feat, input_type="string")
+    studios_hashed = studio_hasher.transform(data["studios"]).toarray()
+    data["studios"] = [hash for hash in studios_hashed]
+    data["studios"] = data["studios"].apply(
+        lambda x: x.reshape(
+            -1,
+        )
     )
-    studios_hashed = studio_hasher.transform(data['studios']).toarray()
-    data['studios'] = [hash for hash in studios_hashed]
-    data['studios'] = data['studios'].apply(lambda x: x.reshape(-1,))
 
     # Generate embeddings
     print("Generating embeddings...")
@@ -365,8 +422,8 @@ def make_embeddings(data: pd.DataFrame, studios_n_feat: int, config: dict) -> pd
 
     # Join all data
     print("Merging data...")
-    data = data.merge(synopsis_df, on='id', how='left')
-    data = data.merge(related_df, on='id', how='left')
+    data = data.merge(synopsis_df, on="id", how="left")
+    data = data.merge(related_df, on="id", how="left")
 
     print(f"Final data shape: {data.shape}")
     return data
