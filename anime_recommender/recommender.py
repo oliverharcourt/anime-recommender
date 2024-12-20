@@ -1,8 +1,8 @@
-import argparse
 import json
 import os
 
 import pandas as pd
+from engine import Recommender
 from pymilvus import (
     Collection,
     CollectionSchema,
@@ -18,7 +18,6 @@ if os.getenv("ENV") == "dev":
 else:
     data_loader = None
     preprocess = None
-from anime_recommender.recommend import Recommender
 
 
 class AnimeRecommender:
@@ -246,7 +245,7 @@ class AnimeRecommender:
         """
 
         recommender = Recommender(
-            config=self.config["recommender"],
+            config=self.config["engine"],
             collection=self.collection,
             dataset=self.dataset,
         )
@@ -271,39 +270,3 @@ class AnimeRecommender:
             )
 
         return recommendations
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Anime Recommendation System")
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("-u", "--username", help="Username for recommendations")
-    group.add_argument("-a", "--anime", help="Anime title for similar recommendations")
-    group.add_argument(
-        "-r",
-        "--rebuild",
-        # action="store_true",
-        default=0,
-        type=int,
-        help="Rebuild the dataset from scratch",
-    )
-
-    parser.add_argument(
-        "-l",
-        "--limit",
-        type=int,
-        default=10,
-        help="Number of recommendations to return",
-    )
-
-    args = parser.parse_args()
-
-    if args.rebuild:
-        rec = AnimeRecommender(config_path="config.json")
-        rec.rebuild()
-
-    if args.username:
-        rec = AnimeRecommender(config_path="config.json")
-        print(rec.run(search_str=args.username, anime_mode=False, limit=args.limit))
-    elif args.anime:
-        rec = AnimeRecommender(config_path="config.json")
-        print(rec.run(search_str=args.anime, anime_mode=True, limit=args.limit))
