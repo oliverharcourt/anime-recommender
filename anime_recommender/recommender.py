@@ -2,7 +2,6 @@ import json
 import os
 
 import pandas as pd
-from engine import Recommender
 from pymilvus import (
     Collection,
     CollectionSchema,
@@ -12,6 +11,8 @@ from pymilvus import (
     utility,
 )
 from thefuzz import fuzz, process
+
+from anime_recommender.engine import Recommender
 
 if os.getenv("ENV") == "dev":
     from anime_recommender import data_loader, preprocess
