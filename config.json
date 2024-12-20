@@ -12,8 +12,7 @@
         "studios_dim": 75
 
     },
-    "recommender": {
-        "MAL_ACCESS_TOKEN": "${MAL_ACCESS_TOKEN}",
+    "engine": {
         "nprobe": {
             "text": 512,
             "other": 64
