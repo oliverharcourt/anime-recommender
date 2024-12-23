@@ -1,1 +1,1 @@
-from recommender import AnimeRecommender  # noqa: F401
+from anime_recommender.recommender import AnimeRecommender  # noqa: F401
