@@ -255,7 +255,6 @@ class AnimeRecommender:
 
         # Dispatch the recommendation task
         if not anime_mode:
-            # print(f"Recommendations for user {self.search_str}:")
             recommendations = recommender.recommend_by_username(
                 user_name=search_str, limit=limit
             )
@@ -265,7 +264,6 @@ class AnimeRecommender:
             )
             if anime_id is None:
                 return
-            # print(f"Recommendations for \'{dataset[dataset['id'] == anime_id]['title']}\':")
             recommendations = recommender.recommend_by_id(
                 anime_id=anime_id, limit=limit
             )
