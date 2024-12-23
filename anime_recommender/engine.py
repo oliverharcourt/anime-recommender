@@ -1,8 +1,10 @@
-import sys
+import os
 
 import pandas as pd
 import requests
 from pymilvus import AnnSearchRequest, Collection, SearchResult, WeightedRanker
+
+from anime_recommender import exceptions
 
 
 class Recommender:
@@ -14,7 +16,7 @@ class Recommender:
         self.anime_df: pd.DataFrame = dataset
         self.base_url: str = config['BASE_URL']
         self.request_headers = {
-            'Authorization': f"Bearer {config['MAL_ACCESS_TOKEN']}"
+            "Authorization": f"Bearer {os.getenv("MAL_ACCESS_TOKEN")}"
         }
 
     def _get_user_anime_list(self, user_name: str,
