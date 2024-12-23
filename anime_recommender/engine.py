@@ -16,7 +16,7 @@ class Recommender:
         self.anime_df: pd.DataFrame = dataset
         self.base_url: str = config["BASE_URL"]
         self.request_headers = {
-            "Authorization": f"Bearer {os.getenv("MAL_ACCESS_TOKEN")}"
+            "Authorization": f"Bearer {os.getenv('MAL_ACCESS_TOKEN')}"
         }
 
     def _get_user_anime_list(
