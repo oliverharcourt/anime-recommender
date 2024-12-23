@@ -57,12 +57,21 @@ class Recommender:
                 )
 
             except Exception as e:
-                print(e)
+                raise e
+
+            if user_anime_list.status_code == 401:
+                raise exceptions.InvalidTokenError()
+
+            if user_anime_list.status_code == 404:
+                raise exceptions.UserNotFoundError()
+
+            if user_anime_list.status_code == 429:
+                raise exceptions.RateLimitExceededError()
 
             if user_anime_list.status_code != 200:
-                print(
-                    f"Failed to fetch anime list for user: {user_name}, status code: {user_anime_list.status_code}")
-                sys.exit(1)
+                raise NotImplementedError(
+                    f"Recieved status code: {user_anime_list.status_code}"
+                )
 
             user_anime_list = user_anime_list.json()
 
