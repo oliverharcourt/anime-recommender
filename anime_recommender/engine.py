@@ -80,13 +80,13 @@ class Recommender:
                 raise e
 
             if user_anime_list.status_code == 401:
-                raise exceptions.InvalidTokenError()
+                raise exceptions.InvalidTokenError("Invalid MAL API token")
 
             if user_anime_list.status_code == 404:
-                raise exceptions.UserNotFoundError()
+                raise exceptions.UserNotFoundError(f"User {user_name} not found")
 
             if user_anime_list.status_code == 429:
-                raise exceptions.RateLimitExceededError()
+                raise exceptions.RateLimitExceededError("API rate limit exceeded")
 
             if user_anime_list.status_code != 200:
                 raise NotImplementedError(
@@ -118,7 +118,9 @@ class Recommender:
 
     def _get_random_recommendations(self, limit: int) -> pd.DataFrame:
         # Get random recommendations
-        random_sample = self.anime_df.sample(n=limit)[["id", "title"]]
+        random_sample = self.anime_df.sample(n=limit)["id"].to_frame()
+
+        random_sample["distance"] = 0
 
         random_sample["link"] = random_sample.apply(
             lambda x: f"https://myanimelist.net/anime/{int(x['id'])}", axis=1
