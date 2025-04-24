@@ -1,5 +1,9 @@
 # Anime Recommender
 
+## This Project Has Been Archived
+
+This project has been archived and it's functionality will be merged into the [curatorchan](https://github.com/oliverharcourt/curatorchan) repository.
+
 ## General Info
 
 This project is a simple recommendation engine for MyAnimeList. It uses a fine-tuned BERT model to generate embeddings for animes, and Milvus for similarity search in this embedding space.
